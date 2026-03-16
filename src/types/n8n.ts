@@ -175,6 +175,17 @@ export type JobMatchSummary = {
   jd_url?: string;
 };
 
+// ─── Unified User Data ──────────────────────────────────────────────────────
+
+export type UserDataResponse = {
+  resumes: ResumeRecord[];
+  jds: JdRecord[];
+  job_match_summary: JobMatchSummary[];
+  remaining_credit: number;
+  credit_history: CreditTransaction[];
+  user_analytics: UserAnalyticsResponse;
+};
+
 // ─── Delete ──────────────────────────────────────────────────────────────────
 
 export type DeleteResponse = {

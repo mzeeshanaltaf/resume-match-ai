@@ -1,38 +1,56 @@
 import { callN8nWebhook } from "./n8n";
-import type { ResumeRecord, JdRecord, JobMatchSummary } from "@/types/n8n";
+import type {
+  ResumeRecord,
+  JdRecord,
+  JobMatchSummary,
+  UserDataResponse,
+} from "@/types/n8n";
 
-const WEBHOOK_ID = process.env.N8N_DATA_WEBHOOK_ID!;
+const USER_DATA_WEBHOOK_ID = "26dee7a9-19a0-4f65-af48-506384f50370";
 
-export async function getResumes(
-  userId: string,
-  isCandidate: boolean
-): Promise<ResumeRecord[]> {
-  const data = await callN8nWebhook<ResumeRecord[] | Record<string, unknown>>(
-    WEBHOOK_ID,
-    { event_type: "get_resume", user_id: userId, is_candidate: isCandidate }
+/**
+ * Single call to n8n that returns all user data:
+ * resumes, jds, job_match_summary, remaining_credit, credit_history, user_analytics.
+ */
+export async function getUserData(userId: string): Promise<UserDataResponse> {
+  const raw = await callN8nWebhook<UserDataResponse | UserDataResponse[]>(
+    USER_DATA_WEBHOOK_ID,
+    { event_type: "get_user_data", user_id: userId }
   );
-  const arr = Array.isArray(data) ? data : [];
-  return arr.filter((r): r is ResumeRecord => !!r.file_id);
+  const d = Array.isArray(raw) ? raw[0] : raw;
+  return {
+    resumes: Array.isArray(d?.resumes)
+      ? d.resumes.filter((r: ResumeRecord) => !!r.file_id)
+      : [],
+    jds: Array.isArray(d?.jds)
+      ? d.jds.filter((r: JdRecord) => !!r.url_id)
+      : [],
+    job_match_summary: Array.isArray(d?.job_match_summary)
+      ? d.job_match_summary.filter((r: JobMatchSummary) => !!r.job_match_summary)
+      : [],
+    remaining_credit: Number(d?.remaining_credit ?? 0),
+    credit_history: Array.isArray(d?.credit_history) ? d.credit_history : [],
+    user_analytics: {
+      total_resume_processed: Number(d?.user_analytics?.total_resume_processed ?? 0),
+      total_jds_processed: Number(d?.user_analytics?.total_jds_processed ?? 0),
+      total_job_match_summary_processed: Number(d?.user_analytics?.total_job_match_summary_processed ?? 0),
+    },
+  };
 }
 
-export async function getJds(
-  userId: string,
-  isCandidate: boolean
-): Promise<JdRecord[]> {
-  const data = await callN8nWebhook<JdRecord[] | Record<string, unknown>>(
-    WEBHOOK_ID,
-    { event_type: "get_jds", user_id: userId, is_candidate: isCandidate }
-  );
-  const arr = Array.isArray(data) ? data : [];
-  return arr.filter((r): r is JdRecord => !!r.url_id);
+// ─── Convenience wrappers (delegate to getUserData) ─────────────────────────
+
+export async function getResumes(userId: string): Promise<ResumeRecord[]> {
+  const data = await getUserData(userId);
+  return data.resumes;
 }
 
-export async function getJobMatchSummary(
-  userId: string
-): Promise<JobMatchSummary[]> {
-  const data = await callN8nWebhook<
-    JobMatchSummary[] | Record<string, unknown>
-  >(WEBHOOK_ID, { event_type: "get_job_match_summary", user_id: userId });
-  const arr = Array.isArray(data) ? data : [];
-  return arr.filter((r): r is JobMatchSummary => !!r.job_match_summary);
+export async function getJds(userId: string): Promise<JdRecord[]> {
+  const data = await getUserData(userId);
+  return data.jds;
+}
+
+export async function getJobMatchSummary(userId: string): Promise<JobMatchSummary[]> {
+  const data = await getUserData(userId);
+  return data.job_match_summary;
 }

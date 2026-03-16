@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { getJds } from "@/lib/n8n-data";
+import { getUserData } from "@/lib/n8n-data";
 
 export async function GET() {
   const { userId } = await auth();
@@ -7,6 +7,6 @@ export async function GET() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const jds = await getJds(userId);
-  return Response.json(jds);
+  const data = await getUserData(userId);
+  return Response.json(data);
 }

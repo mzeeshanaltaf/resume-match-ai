@@ -1,4 +1,5 @@
 import { callN8nWebhook } from "./n8n";
+import { getUserData } from "./n8n-data";
 import type {
   CreditBalanceResponse,
   CreditHistoryResponse,
@@ -13,20 +14,16 @@ export function signupCredits(userId: string): Promise<{ success: boolean }> {
   });
 }
 
-export function getRemainingCredits(
+export async function getRemainingCredits(
   userId: string
 ): Promise<CreditBalanceResponse> {
-  return callN8nWebhook<CreditBalanceResponse>(WEBHOOK_ID, {
-    event_type: "get_remaining_credit",
-    user_id: userId,
-  });
+  const data = await getUserData(userId);
+  return { current_balance: data.remaining_credit };
 }
 
-export function getCreditHistory(
+export async function getCreditHistory(
   userId: string
 ): Promise<CreditHistoryResponse> {
-  return callN8nWebhook<CreditHistoryResponse>(WEBHOOK_ID, {
-    event_type: "credit_history",
-    user_id: userId,
-  });
+  const data = await getUserData(userId);
+  return data.credit_history;
 }

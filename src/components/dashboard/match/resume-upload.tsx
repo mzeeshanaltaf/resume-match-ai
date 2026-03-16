@@ -16,7 +16,7 @@ interface ResumeUploadProps {
 }
 
 export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonLabel = "Upload resume" }: ResumeUploadProps) {
-  const { refreshCredits } = useDashboardData();
+  const { refreshAll } = useDashboardData();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -55,7 +55,7 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
       }
       const data = await res.json();
       toast.success("Resume uploaded successfully.");
-      refreshCredits();
+      refreshAll();
       onUploaded({
         file_id: data.file_id,
         file_name: data.file_name ?? file.name,

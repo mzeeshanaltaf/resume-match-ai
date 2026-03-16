@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   // n8n doesn't return file_id — fetch the updated resume list to find it
-  const resumes = await getResumes(userId, isCandidate);
+  const resumes = await getResumes(userId);
   const newest = resumes[0];
 
   if (!newest) {

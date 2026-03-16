@@ -11,35 +11,56 @@ import {
 import type {
   UserAnalyticsResponse,
   JobMatchSummary,
-  CreditBalanceResponse,
   CreditTransaction,
-  CreditHistoryResponse,
+  ResumeRecord,
+  JdRecord,
+  UserDataResponse,
 } from "@/types/n8n";
 
 interface DashboardDataContextType {
   analytics: UserAnalyticsResponse | null;
   matches: JobMatchSummary[] | null;
+  resumes: ResumeRecord[] | null;
+  jds: JdRecord[] | null;
   creditBalance: number | null;
   creditHistory: CreditTransaction[] | null;
   loading: boolean;
   refreshAll: () => Promise<void>;
-  refreshCredits: () => Promise<void>;
 }
 
 const DashboardDataContext = createContext<DashboardDataContextType | null>(
   null
 );
 
+function applyUserData(
+  data: UserDataResponse,
+  setters: {
+    setAnalytics: (v: UserAnalyticsResponse) => void;
+    setMatches: (v: JobMatchSummary[]) => void;
+    setResumes: (v: ResumeRecord[]) => void;
+    setJds: (v: JdRecord[]) => void;
+    setCreditBalance: (v: number) => void;
+    setCreditHistory: (v: CreditTransaction[]) => void;
+  }
+) {
+  setters.setAnalytics(data.user_analytics);
+  setters.setMatches(Array.isArray(data.job_match_summary) ? data.job_match_summary : []);
+  setters.setResumes(Array.isArray(data.resumes) ? data.resumes : []);
+  setters.setJds(Array.isArray(data.jds) ? data.jds : []);
+  setters.setCreditBalance(data.remaining_credit ?? 0);
+  setters.setCreditHistory(Array.isArray(data.credit_history) ? data.credit_history : []);
+}
+
 export function DashboardDataProvider({ children }: { children: ReactNode }) {
-  const [analytics, setAnalytics] = useState<UserAnalyticsResponse | null>(
-    null
-  );
+  const [analytics, setAnalytics] = useState<UserAnalyticsResponse | null>(null);
   const [matches, setMatches] = useState<JobMatchSummary[] | null>(null);
+  const [resumes, setResumes] = useState<ResumeRecord[] | null>(null);
+  const [jds, setJds] = useState<JdRecord[] | null>(null);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
-  const [creditHistory, setCreditHistory] = useState<CreditTransaction[] | null>(
-    null
-  );
+  const [creditHistory, setCreditHistory] = useState<CreditTransaction[] | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const setters = { setAnalytics, setMatches, setResumes, setJds, setCreditBalance, setCreditHistory };
 
   // Initial fetch on mount (AbortController handles React 18 Strict Mode)
   useEffect(() => {
@@ -48,30 +69,11 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
 
     async function load() {
       try {
-        const [analyticsRes, matchesRes, balanceRes, historyRes] =
-          await Promise.all([
-            fetch("/api/analytics", { signal }),
-            fetch("/api/match/history", { signal }),
-            fetch("/api/credits/balance", { signal }),
-            fetch("/api/credits/history", { signal }),
-          ]);
-
+        const res = await fetch("/api/user-data", { signal });
         if (signal.aborted) return;
-
-        if (analyticsRes.ok) {
-          setAnalytics(await analyticsRes.json());
-        }
-        if (matchesRes.ok) {
-          const d = await matchesRes.json();
-          setMatches(Array.isArray(d) ? d : []);
-        }
-        if (balanceRes.ok) {
-          const d: CreditBalanceResponse = await balanceRes.json();
-          setCreditBalance(d.current_balance ?? 0);
-        }
-        if (historyRes.ok) {
-          const d: CreditHistoryResponse = await historyRes.json();
-          setCreditHistory(Array.isArray(d) ? d : []);
+        if (res.ok) {
+          const data: UserDataResponse = await res.json();
+          applyUserData(data, setters);
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -82,48 +84,21 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
 
     load();
     return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Full refresh — called after Job Fit / Resume Screening completes
+  // Full refresh — called after Job Fit / Resume Screening / uploads complete
   const refreshAll = useCallback(async () => {
     try {
-      const [analyticsRes, matchesRes, balanceRes, historyRes] =
-        await Promise.all([
-          fetch("/api/analytics"),
-          fetch("/api/match/history"),
-          fetch("/api/credits/balance"),
-          fetch("/api/credits/history"),
-        ]);
-
-      if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
-      if (matchesRes.ok) {
-        const d = await matchesRes.json();
-        setMatches(Array.isArray(d) ? d : []);
-      }
-      if (balanceRes.ok) {
-        const d: CreditBalanceResponse = await balanceRes.json();
-        setCreditBalance(d.current_balance ?? 0);
-      }
-      if (historyRes.ok) {
-        const d: CreditHistoryResponse = await historyRes.json();
-        setCreditHistory(Array.isArray(d) ? d : []);
-      }
-    } catch {
-      // fail silently
-    }
-  }, []);
-
-  // Lightweight credit-only refresh — called after credit-consuming actions
-  const refreshCredits = useCallback(async () => {
-    try {
-      const res = await fetch("/api/credits/balance");
+      const res = await fetch("/api/user-data");
       if (res.ok) {
-        const d: CreditBalanceResponse = await res.json();
-        setCreditBalance(d.current_balance ?? 0);
+        const data: UserDataResponse = await res.json();
+        applyUserData(data, setters);
       }
     } catch {
       // fail silently
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -131,11 +106,12 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       value={{
         analytics,
         matches,
+        resumes,
+        jds,
         creditBalance,
         creditHistory,
         loading,
         refreshAll,
-        refreshCredits,
       }}
     >
       {children}

@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { getRemainingCredits } from "@/lib/n8n-credits";
+import { getUserData } from "@/lib/n8n-data";
 import { Zap } from "lucide-react";
 
 export async function CreditBadge() {
@@ -8,11 +8,8 @@ export async function CreditBadge() {
 
   let balance = 0;
   try {
-    const raw = await getRemainingCredits(userId);
-    // Normalize: n8n may return an array instead of a plain object
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = Array.isArray(raw) ? (raw as any[])[0] : raw;
-    balance = typeof data?.current_balance === "number" ? data.current_balance : 0;
+    const data = await getUserData(userId);
+    balance = data.remaining_credit;
   } catch {
     // n8n unavailable — show 0 gracefully
   }

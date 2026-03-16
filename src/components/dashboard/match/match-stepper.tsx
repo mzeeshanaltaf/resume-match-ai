@@ -22,7 +22,7 @@ const STEPS = [
 ];
 
 export function MatchStepper() {
-  const { refreshAll, refreshCredits } = useDashboardData();
+  const { refreshAll } = useDashboardData();
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
   const [jdMode, setJdMode] = useState<"url" | "text">("url");
@@ -201,7 +201,7 @@ export function MatchStepper() {
           <ResumePicker
             onNext={(fileId) => {
               setSelectedResumeId(fileId);
-              refreshCredits();
+              refreshAll();
               setCurrentStep(2);
             }}
           />

@@ -21,7 +21,7 @@ const STEPS = [
 ];
 
 export function ScreenStepper() {
-  const { refreshAll, refreshCredits } = useDashboardData();
+  const { refreshAll } = useDashboardData();
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedResumes, setSelectedResumes] = useState<ResumeRecord[]>([]);
@@ -177,7 +177,7 @@ export function ScreenStepper() {
             onNext={(ids, resumes) => {
               setSelectedIds(ids);
               setSelectedResumes(resumes);
-              refreshCredits();
+              refreshAll();
               setCurrentStep(2);
             }}
           />

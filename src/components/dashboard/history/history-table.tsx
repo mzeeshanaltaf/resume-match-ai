@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -30,11 +30,12 @@ import {
   Loader2,
   Target,
   ScanSearch,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MatchDetailDialog } from "./match-detail-dialog";
 import { cn } from "@/lib/utils";
-import type { JobMatchSummary } from "@/types/n8n";
+import type { JobMatchSummary, ResumeRecord } from "@/types/n8n";
 
 type Tab = "job_fit" | "screener";
 type SortField = "match_score" | "updated_at";
@@ -59,9 +60,28 @@ function formatDate(iso: string) {
   });
 }
 
-export function HistoryTable({ initialMatches }: { initialMatches: JobMatchSummary[] }) {
+function openPdfPreview(base64: string) {
+  const byteChars = atob(base64);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) {
+    byteNumbers[i] = byteChars.charCodeAt(i);
+  }
+  const blob = new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
+  window.open(URL.createObjectURL(blob), "_blank");
+}
+
+export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobMatchSummary[]; resumes: ResumeRecord[] }) {
   const [matches, setMatches] = useState<JobMatchSummary[]>(initialMatches);
   useEffect(() => { setMatches(initialMatches); }, [initialMatches]);
+
+  // Build file_id → base64 lookup for PDF preview
+  const base64Map = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of resumes) {
+      if (r.file_id && r.file_base64) map.set(r.file_id, r.file_base64);
+    }
+    return map;
+  }, [resumes]);
   const [activeTab, setActiveTab] = useState<Tab>("job_fit");
   const [filter, setFilter] = useState("");
   const [sortField, setSortField] = useState<SortField>("updated_at");
@@ -234,9 +254,22 @@ export function HistoryTable({ initialMatches }: { initialMatches: JobMatchSumma
                 return (
                   <TableRow key={`${key}_${i}`} className={cn(isDeleting && "opacity-50")}>
                     <TableCell className="font-medium max-w-[160px]">
-                      <span className="block truncate text-sm">
-                        {match.file_name ?? match.file_id ?? "Unknown"}
-                      </span>
+                      {base64Map.has(match.file_id) ? (
+                        <button
+                          onClick={() => openPdfPreview(base64Map.get(match.file_id)!)}
+                          className="flex items-center gap-1.5 text-left group"
+                          title="Preview PDF"
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-emerald-500 transition-colors" />
+                          <span className="block truncate text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 underline decoration-dotted underline-offset-2 transition-colors">
+                            {match.file_name ?? match.file_id ?? "Unknown"}
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="block truncate text-sm">
+                          {match.file_name ?? match.file_id ?? "Unknown"}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="max-w-[200px]">
                       {match.jd_url && match.jd_url.trim() !== "" ? (

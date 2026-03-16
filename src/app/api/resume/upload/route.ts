@@ -1,7 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
 import { processResume } from "@/lib/n8n-main";
-import { getResumes } from "@/lib/n8n-data";
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
@@ -14,7 +13,8 @@ export async function POST(req: NextRequest) {
 
   const formData = await req.formData();
   const raw = await processResume(userId, formData, isCandidate);
-  const result = Array.isArray(raw) ? raw[0] : raw;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any = Array.isArray(raw) ? raw[0] : raw;
 
   if (!result?.success) {
     return Response.json(
@@ -23,19 +23,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // n8n doesn't return file_id — fetch the updated resume list to find it
-  const resumes = await getResumes(userId);
-  const newest = resumes[0];
-
-  if (!newest) {
+  if (!result.file_id) {
     return Response.json(
-      { error: "Resume processed but could not be retrieved." },
+      { error: "Resume processed but no file ID was returned." },
       { status: 500 }
     );
   }
 
   return Response.json({
-    file_id: newest.file_id,
-    file_name: newest.file_name,
+    file_id: result.file_id,
+    file_name: result.file_name ?? "",
   });
 }

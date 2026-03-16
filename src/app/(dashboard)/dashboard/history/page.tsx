@@ -8,7 +8,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 export default function HistoryPage() {
-  const { matches, loading } = useDashboardData();
+  const { matches, resumes, loading } = useDashboardData();
 
   if (loading) {
     return (
@@ -61,7 +61,7 @@ export default function HistoryPage() {
         </Button>
       </div>
 
-      <HistoryTable initialMatches={matches ?? []} />
+      <HistoryTable initialMatches={matches ?? []} resumes={resumes ?? []} />
     </div>
   );
 }

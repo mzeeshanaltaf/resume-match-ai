@@ -5,7 +5,6 @@ import { Upload, FileText, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useDashboardData } from "@/contexts/dashboard-data";
 import type { ResumeRecord } from "@/types/n8n";
 
 interface ResumeUploadProps {
@@ -16,7 +15,6 @@ interface ResumeUploadProps {
 }
 
 export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonLabel = "Upload resume" }: ResumeUploadProps) {
-  const { refreshAll } = useDashboardData();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -55,7 +53,6 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
       }
       const data = await res.json();
       toast.success("Resume uploaded successfully.");
-      refreshAll();
       onUploaded({
         file_id: data.file_id,
         file_name: data.file_name ?? file.name,

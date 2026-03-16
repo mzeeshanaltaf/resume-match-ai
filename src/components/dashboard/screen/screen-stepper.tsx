@@ -177,7 +177,6 @@ export function ScreenStepper() {
             onNext={(ids, resumes) => {
               setSelectedIds(ids);
               setSelectedResumes(resumes);
-              refreshAll();
               setCurrentStep(2);
             }}
           />

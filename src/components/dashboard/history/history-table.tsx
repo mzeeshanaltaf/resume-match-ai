@@ -13,6 +13,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ArrowUpDown,
   Eye,
   Trash2,
@@ -58,6 +68,7 @@ export function HistoryTable({ initialMatches }: { initialMatches: JobMatchSumma
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [viewMatch, setViewMatch] = useState<JobMatchSummary | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<JobMatchSummary | null>(null);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -271,7 +282,7 @@ export function HistoryTable({ initialMatches }: { initialMatches: JobMatchSumma
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDelete(match)}
+                          onClick={() => setPendingDelete(match)}
                           disabled={isDeleting}
                           title="Delete"
                         >
@@ -295,6 +306,33 @@ export function HistoryTable({ initialMatches }: { initialMatches: JobMatchSumma
         match={viewMatch}
         onClose={() => setViewMatch(null)}
       />
+
+      <AlertDialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this analysis?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the match analysis
+              {pendingDelete?.file_name ? ` for "${pendingDelete.file_name}"` : ""}.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => {
+                if (pendingDelete) {
+                  handleDelete(pendingDelete);
+                  setPendingDelete(null);
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

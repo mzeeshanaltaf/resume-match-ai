@@ -201,7 +201,6 @@ export function MatchStepper() {
           <ResumePicker
             onNext={(fileId) => {
               setSelectedResumeId(fileId);
-              refreshAll();
               setCurrentStep(2);
             }}
           />

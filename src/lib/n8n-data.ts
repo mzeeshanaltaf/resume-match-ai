@@ -18,16 +18,31 @@ export async function getUserData(userId: string): Promise<UserDataResponse> {
     { event_type: "get_user_data", user_id: userId }
   );
   const d = Array.isArray(raw) ? raw[0] : raw;
+  const resumes = Array.isArray(d?.resumes)
+    ? d.resumes.filter((r: ResumeRecord) => !!r.file_id)
+    : [];
+  const jds = Array.isArray(d?.jds)
+    ? d.jds.filter((r: JdRecord) => !!r.url_id)
+    : [];
+
+  // Build lookup maps so we can enrich match summaries with file_name / jd_url
+  const resumeMap = new Map(resumes.map((r: ResumeRecord) => [r.file_id, r.file_name]));
+  const jdMap = new Map(jds.map((j: JdRecord) => [j.url_id, j.jd_url]));
+
+  const matches = Array.isArray(d?.job_match_summary)
+    ? d.job_match_summary
+        .filter((r: JobMatchSummary) => !!r.job_match_summary)
+        .map((m: JobMatchSummary) => ({
+          ...m,
+          file_name: m.file_name || resumeMap.get(m.file_id) || undefined,
+          jd_url: m.jd_url || jdMap.get(m.url_id) || undefined,
+        }))
+    : [];
+
   return {
-    resumes: Array.isArray(d?.resumes)
-      ? d.resumes.filter((r: ResumeRecord) => !!r.file_id)
-      : [],
-    jds: Array.isArray(d?.jds)
-      ? d.jds.filter((r: JdRecord) => !!r.url_id)
-      : [],
-    job_match_summary: Array.isArray(d?.job_match_summary)
-      ? d.job_match_summary.filter((r: JobMatchSummary) => !!r.job_match_summary)
-      : [],
+    resumes,
+    jds,
+    job_match_summary: matches,
     remaining_credit: Number(d?.remaining_credit ?? 0),
     credit_history: Array.isArray(d?.credit_history) ? d.credit_history : [],
     user_analytics: {

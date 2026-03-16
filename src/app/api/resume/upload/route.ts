@@ -13,8 +13,13 @@ export async function POST(req: NextRequest) {
 
   const formData = await req.formData();
   const raw = await processResume(userId, formData, isCandidate);
+
+  // n8n may wrap the response in one or more array layers — unwrap to plain object
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result: any = Array.isArray(raw) ? raw[0] : raw;
+  let result: any = raw;
+  while (Array.isArray(result)) {
+    result = result[0];
+  }
 
   if (!result?.success) {
     return Response.json(

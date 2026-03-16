@@ -1,8 +1,11 @@
 // ─── Main Workflow ──────────────────────────────────────────────────────────
 
 export type ProcessResumeResponse = {
-  file_id: string;
-  file_name: string;
+  success: boolean;
+  status?: string;
+  file_id?: string;
+  file_name?: string;
+  message?: string;
 };
 
 export type ScrapeJdResponse = {

@@ -55,7 +55,7 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
       toast.success("Resume uploaded successfully.");
       onUploaded({
         file_id: data.file_id,
-        file_name: data.file_name ?? file.name,
+        file_name: data.file_name || file.name,
         file_size: file.size,
         file_base64: "",
       });

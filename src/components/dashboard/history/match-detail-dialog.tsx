@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   AlertTriangle,
   TrendingUp,
@@ -19,6 +20,7 @@ import {
   ChevronUp,
   Building2,
   MapPin,
+  Printer,
 } from "lucide-react";
 import { ScoreRing } from "@/components/dashboard/match/score-ring";
 import { cn } from "@/lib/utils";
@@ -99,6 +101,8 @@ function CollapsibleSection({
 }
 
 export function MatchDetailDialog({ match, onClose }: MatchDetailDialogProps) {
+  const printRef = useRef<HTMLDivElement>(null);
+
   if (!match) return null;
 
   const ms = match.job_match_summary?.match_summary;
@@ -109,19 +113,173 @@ export function MatchDetailDialog({ match, onClose }: MatchDetailDialogProps) {
   const score = ms?.overall_score_percent ?? 0;
   const confidence = ms?.score_confidence ?? "unknown";
 
+  function handlePrint() {
+    const el = printRef.current;
+    if (!el) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html><head><title>Match Report - ${match!.file_name ?? match!.file_id ?? "Report"}</title>
+      <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; color: #1a1a1a; font-size: 13px; line-height: 1.5; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        h3 { font-size: 14px; margin-bottom: 8px; }
+        h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #666; margin-bottom: 6px; }
+        p { margin-bottom: 4px; }
+        .badge { display: inline-block; border: 1px solid #ddd; border-radius: 9999px; padding: 1px 8px; font-size: 10px; font-weight: 600; }
+        .section { border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; margin-bottom: 12px; page-break-inside: avoid; }
+        .card { border: 1px solid #e5e5e5; border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+        .text-muted { color: #666; }
+        .text-sm { font-size: 12px; }
+        .text-xs { font-size: 11px; }
+        .green { color: #059669; }
+        .red { color: #dc2626; }
+        .score-header { text-align: center; margin: 16px 0; }
+        .score-value { font-size: 36px; font-weight: 700; }
+        .meta { color: #666; font-size: 12px; margin-bottom: 16px; }
+        @media print { body { padding: 0; } }
+      </style></head><body>
+    `);
+    printWindow.document.write(`<h1>Match Report</h1>`);
+    printWindow.document.write(`<p class="meta">${match!.file_name ?? match!.file_id ?? "Unknown"}</p>`);
+
+    // Job info
+    if (jd && (jd.company_name || jd.job_title)) {
+      printWindow.document.write(`<div class="section"><strong>${jd.company_name ?? ""}</strong>`);
+      if (jd.job_title) printWindow.document.write(`<br/><span class="text-muted">${jd.job_title}</span>`);
+      if (jd.location) printWindow.document.write(`<br/><span class="text-muted">${jd.location}</span>`);
+      printWindow.document.write(`</div>`);
+    }
+
+    // Score
+    printWindow.document.write(`<div class="score-header"><div class="score-value">${score}%</div><span class="badge">${confidence} confidence</span></div>`);
+
+    // Rationale
+    if (ms?.rationale) {
+      printWindow.document.write(`<div class="section"><h3>Rationale</h3><p class="text-muted">${ms.rationale}</p></div>`);
+    }
+
+    // Key Strengths
+    if (ms?.key_strengths?.length) {
+      printWindow.document.write(`<div class="section"><h3>Key Strengths</h3>`);
+      for (const s of ms.key_strengths) {
+        printWindow.document.write(`<div class="card"><p><strong>${s.strength}</strong></p><p class="text-xs text-muted">${s.evidence}</p>`);
+        if (s.jd_alignment) printWindow.document.write(`<p class="text-xs green">${s.jd_alignment}</p>`);
+        printWindow.document.write(`</div>`);
+      }
+      printWindow.document.write(`</div>`);
+    }
+
+    // Critical Gaps
+    if (ms?.critical_gaps?.length) {
+      printWindow.document.write(`<div class="section"><h3>Critical Gaps (${ms.critical_gaps.length})</h3>`);
+      for (const g of ms.critical_gaps) {
+        printWindow.document.write(`<div class="card"><p>${g.gap}</p><p class="text-xs"><span class="badge">${g.impact_level} impact</span> <span class="badge">${g.remediation_difficulty} to fix</span></p>`);
+        if (g.jd_requirement) printWindow.document.write(`<p class="text-xs text-muted">Requirement: ${g.jd_requirement}</p>`);
+        printWindow.document.write(`</div>`);
+      }
+      printWindow.document.write(`</div>`);
+    }
+
+    // ATS
+    if (ats) {
+      printWindow.document.write(`<div class="section"><h3>ATS Optimization</h3>`);
+      if (ats.keywords_to_add?.length) {
+        printWindow.document.write(`<h4>Keywords to Add</h4>`);
+        for (const kw of ats.keywords_to_add) {
+          printWindow.document.write(`<div class="card"><strong>${kw.keyword}</strong> — <span class="text-muted">${kw.context_suggestion}</span></div>`);
+        }
+      }
+      if (ats.skills_to_rephrase?.length) {
+        printWindow.document.write(`<h4>Skills to Rephrase</h4>`);
+        for (const s of ats.skills_to_rephrase) {
+          printWindow.document.write(`<div class="card"><s class="text-muted">${s.current_phrase}</s> → <strong class="green">${s.suggested_rephrase}</strong>`);
+          if (s.reason) printWindow.document.write(`<br/><span class="text-xs text-muted">${s.reason}</span>`);
+          printWindow.document.write(`</div>`);
+        }
+      }
+      if (ats.section_recommendations?.length) {
+        printWindow.document.write(`<h4>Section Recommendations</h4>`);
+        for (const sr of ats.section_recommendations) {
+          printWindow.document.write(`<div class="card"><strong>${sr.section}</strong><br/><span class="text-muted">${sr.recommendation}</span></div>`);
+        }
+      }
+      printWindow.document.write(`</div>`);
+    }
+
+    // Improvement Suggestions
+    if (improvements) {
+      printWindow.document.write(`<div class="section"><h3>Improvement Suggestions</h3>`);
+      const groups = [
+        { label: "High Priority", items: improvements.high_priority },
+        { label: "Medium Priority", items: improvements.medium_priority },
+        { label: "Nice to Have", items: improvements.nice_to_have },
+      ];
+      for (const g of groups) {
+        if (g.items?.length) {
+          printWindow.document.write(`<h4>${g.label}</h4>`);
+          for (const item of g.items) {
+            printWindow.document.write(`<div class="card"><p>${item.suggestion}</p><p class="text-xs"><span class="badge">${item.effort_required} effort</span> <span class="badge">${item.expected_impact}</span></p>`);
+            if (item.example_phrasing) printWindow.document.write(`<p class="text-xs text-muted" style="font-style:italic">"${item.example_phrasing}"</p>`);
+            printWindow.document.write(`</div>`);
+          }
+        }
+      }
+      printWindow.document.write(`</div>`);
+    }
+
+    // Detailed Analysis
+    if (detailed) {
+      printWindow.document.write(`<div class="section"><h3>Detailed Analysis</h3>`);
+      if (detailed.requirements_met?.length) {
+        printWindow.document.write(`<h4>Requirements Matched</h4>`);
+        for (const rm of detailed.requirements_met) {
+          printWindow.document.write(`<div class="card"><p class="text-muted">${rm.jd_requirement}</p><p class="text-xs">Evidence: ${rm.resume_evidence}</p><p class="text-xs"><span class="badge">${rm.match_quality} match</span> <span class="badge">${rm.requirement_type}</span></p></div>`);
+        }
+      }
+      if (detailed.gaps_and_weak_matches?.length) {
+        printWindow.document.write(`<h4>Gaps & Weak Matches</h4>`);
+        for (const gm of detailed.gaps_and_weak_matches) {
+          printWindow.document.write(`<div class="card"><p class="text-muted">${gm.jd_requirement}</p><p class="text-xs">Status: ${gm.current_status}</p><p class="text-xs"><span class="badge">${gm.impact_level} impact</span> <span class="badge">${gm.requirement_type}</span></p>`);
+          if (gm.suggested_action) printWindow.document.write(`<p class="text-xs green">Action: ${gm.suggested_action}</p>`);
+          printWindow.document.write(`</div>`);
+        }
+      }
+      printWindow.document.write(`</div>`);
+    }
+
+    printWindow.document.write(`</body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }
+
   return (
     <Dialog open={!!match} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-base font-semibold">
-            Match Report
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-base font-semibold">
+              Match Report
+            </DialogTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 mr-6"
+              onClick={handlePrint}
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Print
+            </Button>
+          </div>
           <p className="text-sm text-muted-foreground">
             {match.file_name ?? match.file_id ?? "Unknown"}
           </p>
         </DialogHeader>
 
-        <div className="space-y-5 pt-2">
+        <div ref={printRef} className="space-y-5 pt-2">
           {/* Job info */}
           {jd && (jd.company_name || jd.job_title) && (
             <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-3">

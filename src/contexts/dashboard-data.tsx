@@ -48,16 +48,30 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
 
     async function load() {
       try {
-        const userDataRes = await fetch("/api/user-data", { signal });
+        const [analyticsRes, matchesRes, balanceRes, historyRes] =
+          await Promise.all([
+            fetch("/api/analytics", { signal }),
+            fetch("/api/match/history", { signal }),
+            fetch("/api/credits/balance", { signal }),
+            fetch("/api/credits/history", { signal }),
+          ]);
 
         if (signal.aborted) return;
 
-        if (userDataRes.ok) {
-          const data = await userDataRes.json();
-          setAnalytics(data.user_analytics);
-          setMatches(Array.isArray(data.job_match_summary) ? data.job_match_summary : []);
-          setCreditBalance(data.remaining_credit ?? 0);
-          setCreditHistory(Array.isArray(data.credit_history) ? data.credit_history : []);
+        if (analyticsRes.ok) {
+          setAnalytics(await analyticsRes.json());
+        }
+        if (matchesRes.ok) {
+          const d = await matchesRes.json();
+          setMatches(Array.isArray(d) ? d : []);
+        }
+        if (balanceRes.ok) {
+          const d: CreditBalanceResponse = await balanceRes.json();
+          setCreditBalance(d.current_balance ?? 0);
+        }
+        if (historyRes.ok) {
+          const d: CreditHistoryResponse = await historyRes.json();
+          setCreditHistory(Array.isArray(d) ? d : []);
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -73,14 +87,26 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   // Full refresh — called after Job Fit / Resume Screening completes
   const refreshAll = useCallback(async () => {
     try {
-      const userDataRes = await fetch("/api/user-data");
+      const [analyticsRes, matchesRes, balanceRes, historyRes] =
+        await Promise.all([
+          fetch("/api/analytics"),
+          fetch("/api/match/history"),
+          fetch("/api/credits/balance"),
+          fetch("/api/credits/history"),
+        ]);
 
-      if (userDataRes.ok) {
-        const data = await userDataRes.json();
-        setAnalytics(data.user_analytics);
-        setMatches(Array.isArray(data.job_match_summary) ? data.job_match_summary : []);
-        setCreditBalance(data.remaining_credit ?? 0);
-        setCreditHistory(Array.isArray(data.credit_history) ? data.credit_history : []);
+      if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
+      if (matchesRes.ok) {
+        const d = await matchesRes.json();
+        setMatches(Array.isArray(d) ? d : []);
+      }
+      if (balanceRes.ok) {
+        const d: CreditBalanceResponse = await balanceRes.json();
+        setCreditBalance(d.current_balance ?? 0);
+      }
+      if (historyRes.ok) {
+        const d: CreditHistoryResponse = await historyRes.json();
+        setCreditHistory(Array.isArray(d) ? d : []);
       }
     } catch {
       // fail silently

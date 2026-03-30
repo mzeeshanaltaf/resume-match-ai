@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -29,9 +29,25 @@ export function ContactDialog({
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
+  const [captchaSeed, setCaptchaSeed] = useState(0);
+
+  const captcha = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _seed = captchaSeed; // dependency to regenerate
+    const a = Math.floor(Math.random() * 10) + 1;
+    const b = Math.floor(Math.random() * 10) + 1;
+    return { a, b, answer: a + b };
+  }, [captchaSeed]);
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (parseInt(captchaAnswer, 10) !== captcha.answer) {
+      toast.error("Incorrect answer. Please try again.");
+      setCaptchaAnswer("");
+      setCaptchaSeed((s) => s + 1);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/contact", {
@@ -56,6 +72,8 @@ export function ContactDialog({
         setName("");
         setEmail("");
         setMessage("");
+        setCaptchaAnswer("");
+        setCaptchaSeed((s) => s + 1);
       }, 300);
     }
   }
@@ -158,6 +176,24 @@ export function ContactDialog({
                     required
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="contact-captcha"
+                    className="text-sm font-medium"
+                  >
+                    What is {captcha.a} + {captcha.b}?
+                  </label>
+                  <Input
+                    id="contact-captcha"
+                    type="text"
+                    inputMode="numeric"
+                    value={captchaAnswer}
+                    onChange={(e) => setCaptchaAnswer(e.target.value)}
+                    placeholder="Your answer"
+                    required
+                    autoComplete="off"
+                  />
+                </div>
                 <div className="flex justify-end gap-3 pt-2">
                   <Button
                     type="button"
@@ -168,7 +204,7 @@ export function ContactDialog({
                   </Button>
                   <Button
                     type="submit"
-                    disabled={loading || !name.trim() || !email.trim() || !message.trim()}
+                    disabled={loading || !name.trim() || !email.trim() || !message.trim() || !captchaAnswer.trim()}
                     className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
                   >
                     {loading ? "Sending…" : "Send Message"}

@@ -87,6 +87,19 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // New-user retry: if credits are still 0 after initial load, the signup
+  // webhook may not have finished yet. Retry once after a short delay.
+  useEffect(() => {
+    if (loading || creditBalance === null || creditBalance > 0) return;
+
+    const timer = setTimeout(() => {
+      refreshAll();
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, creditBalance]);
+
   // Full refresh — called after Job Fit / Resume Screening / uploads complete
   const refreshAll = useCallback(async () => {
     try {

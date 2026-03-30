@@ -4,13 +4,12 @@ import { ContactDialog } from "./contact-dialog";
 
 const links = {
   Product: [
-    ["Features", "#features"],
-    ["Pricing", "#pricing"],
-    ["How it works", "#how-it-works"],
+    ["Features", "/#features"],
+    ["Pricing", "/#pricing"],
+    ["How it works", "/#how-it-works"],
   ],
   Company: [
     ["About", "/about"],
-    ["Blog", "#"],
   ],
   Legal: [
     ["Privacy", "/privacy"],

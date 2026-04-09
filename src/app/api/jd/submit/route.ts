@@ -22,13 +22,11 @@ export async function POST(req: Request) {
     result = await scrapeJd(userId, jdUrl, isCandidate, jd_text);
   } catch (err) {
     if (err instanceof N8nError) {
-      // DUPLICATE_URL in non-2xx body — treat as success
-      const body = err.body;
-      const msg = body?.message ?? (Array.isArray(body) ? body[0]?.message : undefined);
-      const urlId = body?.url_id ?? (Array.isArray(body) ? body[0]?.url_id : undefined);
-      const jdUrlOut = body?.jd_url ?? (Array.isArray(body) ? body[0]?.jd_url : undefined);
-      if (msg === "DUPLICATE_URL" && urlId) {
-        return Response.json({ url_id: urlId, jd_url: jdUrlOut });
+      const body = Array.isArray(err.body) ? err.body[0] : err.body;
+      if (body?.status === "DUPLICATE_URL") {
+        const urlId = body?.details?.existing_url_id;
+        const jdUrlOut = body?.details?.existing_url;
+        if (urlId) return Response.json({ url_id: urlId, jd_url: jdUrlOut });
       }
     }
     return Response.json({ error: "Failed to process job description." }, { status: 422 });
@@ -39,9 +37,11 @@ export async function POST(req: Request) {
     result = result[0];
   }
 
-  // DUPLICATE_URL in 2xx body — treat as success
-  if (result?.message === "DUPLICATE_URL" && result?.url_id) {
-    return Response.json({ url_id: result.url_id, jd_url: result.jd_url });
+  // DUPLICATE_URL in 2xx body
+  if (!result?.url_id && result?.status === "DUPLICATE_URL") {
+    const urlId = result?.details?.existing_url_id;
+    const jdUrlOut = result?.details?.existing_url;
+    if (urlId) return Response.json({ url_id: urlId, jd_url: jdUrlOut });
   }
 
   return Response.json(result);

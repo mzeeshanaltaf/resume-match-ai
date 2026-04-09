@@ -20,13 +20,11 @@ export async function POST(req: NextRequest) {
     result = await processResume(userId, formData, isCandidate);
   } catch (err) {
     if (err instanceof N8nError) {
-      // DUPLICATE_DOCUMENT in non-2xx body — treat as success
-      const body = err.body;
-      const msg = body?.message ?? (Array.isArray(body) ? body[0]?.message : undefined);
-      const fileId = body?.file_id ?? (Array.isArray(body) ? body[0]?.file_id : undefined);
-      const fileName = body?.file_name ?? (Array.isArray(body) ? body[0]?.file_name : undefined);
-      if (msg === "DUPLICATE_DOCUMENT" && fileId) {
-        return Response.json({ file_id: fileId, file_name: fileName ?? "" });
+      const body = Array.isArray(err.body) ? err.body[0] : err.body;
+      if (body?.status === "DUPLICATE_DOCUMENT") {
+        const fileId = body?.details?.existing_document_file_id;
+        const fileName = body?.details?.existing_document_name ?? "";
+        if (fileId) return Response.json({ file_id: fileId, file_name: fileName });
       }
     }
     return Response.json({ error: "Resume processing failed." }, { status: 422 });
@@ -38,16 +36,14 @@ export async function POST(req: NextRequest) {
   }
 
   if (!result?.success) {
-    // DUPLICATE_DOCUMENT in 2xx body — treat as success
-    const msg = result?.message;
-    if (msg === "DUPLICATE_DOCUMENT" && result?.file_id) {
-      return Response.json({
-        file_id: result.file_id,
-        file_name: result.file_name ?? "",
-      });
+    // DUPLICATE_DOCUMENT in 2xx body
+    if (result?.status === "DUPLICATE_DOCUMENT") {
+      const fileId = result?.details?.existing_document_file_id;
+      const fileName = result?.details?.existing_document_name ?? "";
+      if (fileId) return Response.json({ file_id: fileId, file_name: fileName });
     }
     return Response.json(
-      { error: msg ?? "Resume processing failed." },
+      { error: result?.message ?? "Resume processing failed." },
       { status: 422 }
     );
   }

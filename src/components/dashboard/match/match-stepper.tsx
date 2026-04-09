@@ -58,6 +58,7 @@ export function MatchStepper() {
   // Step 3 sub-states
   const [jdStatus, setJdStatus] = useState<"processing" | "done" | "error">("processing");
   const [jdUrlId, setJdUrlId] = useState<string | null>(null);
+  const [processedJdInput, setProcessedJdInput] = useState<{ mode: "url" | "text"; value: string } | null>(null);
   const [jdError, setJdError] = useState<string | null>(null);
   const [matchLoading, setMatchLoading] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
@@ -75,6 +76,7 @@ export function MatchStepper() {
     setMatchResult(null);
     setJdStatus("processing");
     setJdUrlId(null);
+    setProcessedJdInput(null);
     setJdError(null);
     setMatchLoading(false);
     setMatchError(null);
@@ -108,6 +110,7 @@ export function MatchStepper() {
         if (!urlId) throw new Error("Job description processed but no URL ID returned.");
         setJdUrlId(urlId);
         setJdStatus("done");
+        setProcessedJdInput({ mode: jdMode, value: jdMode === "url" ? url.trim() : jdText.trim() });
         toast.success("Job description processed!");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Something went wrong.";
@@ -150,6 +153,8 @@ export function MatchStepper() {
   }
 
   function goToStep3() {
+    const currentValue = jdMode === "url" ? url.trim() : jdText.trim();
+
     if (jdMode === "url") {
       if (!url.trim()) {
         toast.error("Please enter a job posting URL.");
@@ -167,6 +172,13 @@ export function MatchStepper() {
         return;
       }
     }
+
+    // Skip reprocessing if the same JD was already processed successfully
+    if (jdUrlId && jdStatus === "done" && processedJdInput?.mode === jdMode && processedJdInput?.value === currentValue) {
+      setCurrentStep(3);
+      return;
+    }
+
     jdStarted.current = false;
     setJdError(null);
     setJdStatus("processing");

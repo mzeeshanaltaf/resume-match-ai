@@ -14,6 +14,13 @@ export async function POST(req: Request) {
 
   const isCandidate = is_candidate !== false;
   const jdUrl = url && typeof url === "string" ? url : "";
-  const result = await scrapeJd(userId, jdUrl, isCandidate, jd_text);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any = await scrapeJd(userId, jdUrl, isCandidate, jd_text);
+
+  // DUPLICATE_URL: n8n already has this JD — return the existing url_id as success
+  if (result?.message === "DUPLICATE_URL" && result?.url_id) {
+    return Response.json({ url_id: result.url_id, jd_url: result.jd_url });
+  }
+
   return Response.json(result);
 }

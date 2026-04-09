@@ -57,6 +57,7 @@ export function ScreenStepper() {
   const [url, setUrl] = useState("");
   const [jdText, setJdText] = useState("");
   const [urlId, setUrlId] = useState("");
+  const [processedJdInput, setProcessedJdInput] = useState<{ mode: "url" | "text"; value: string } | null>(null);
   const [processingJd, setProcessingJd] = useState(false);
   const [screening, setScreening] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0, status: "" });
@@ -74,6 +75,7 @@ export function ScreenStepper() {
     setUrl("");
     setJdText("");
     setUrlId("");
+    setProcessedJdInput(null);
     setProcessingJd(false);
     setScreening(false);
     setProgress({ done: 0, total: 0, status: "" });
@@ -81,6 +83,8 @@ export function ScreenStepper() {
   }
 
   async function processJd() {
+    const currentValue = jdMode === "url" ? url.trim() : jdText.trim();
+
     if (jdMode === "url") {
       if (!url.trim()) {
         toast.error("Please enter a job posting URL.");
@@ -98,6 +102,13 @@ export function ScreenStepper() {
         return;
       }
     }
+
+    // Skip reprocessing if the same JD was already processed successfully
+    if (urlId && processedJdInput?.mode === jdMode && processedJdInput?.value === currentValue) {
+      setCurrentStep(3);
+      return;
+    }
+
     setProcessingJd(true);
     try {
       const jdBody: Record<string, unknown> = { is_candidate: false };
@@ -115,6 +126,7 @@ export function ScreenStepper() {
       if (!jdRes.ok) throw new Error("Failed to process job description.");
       const { url_id } = await jdRes.json();
       setUrlId(url_id);
+      setProcessedJdInput({ mode: jdMode, value: currentValue });
       setScreenError(null);
       setCurrentStep(3);
     } catch (err) {

@@ -22,6 +22,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (!result?.success) {
+    // DUPLICATE_DOCUMENT: n8n already has this file — return the existing file_id as success
+    if (result?.message === "DUPLICATE_DOCUMENT" && result?.file_id) {
+      return Response.json({
+        file_id: result.file_id,
+        file_name: result.file_name ?? "",
+      });
+    }
     return Response.json(
       { error: result?.message ?? "Resume processing failed." },
       { status: 422 }

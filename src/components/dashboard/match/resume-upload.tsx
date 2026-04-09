@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, DragEvent } from "react";
-import { Upload, FileText, X } from "lucide-react";
+import { Upload, FileText, X, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ interface ResumeUploadProps {
   buttonLabel?: string;
 }
 
-export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonLabel = "Upload resume" }: ResumeUploadProps) {
+export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonLabel = "Process resume" }: ResumeUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -126,7 +126,7 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
           size="sm"
           className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
         >
-          <><Upload className="h-4 w-4" /> {buttonLabel}</>
+          <><Cpu className="h-4 w-4" /> {buttonLabel}</>
 
         </Button>
         {onCancel && (

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { FileText, Plus, CheckSquare, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,34 +8,42 @@ import type { ResumeRecord } from "@/types/n8n";
 
 interface MultiResumePickerProps {
   onNext: (fileIds: string[], resumes: ResumeRecord[]) => void;
+  resumes: ResumeRecord[];
+  selectedIds: string[];
+  showUpload: boolean;
+  onResumesChange: (resumes: ResumeRecord[]) => void;
+  onSelectedIdsChange: (ids: string[]) => void;
+  onShowUploadChange: (show: boolean) => void;
 }
 
-export function MultiResumePicker({ onNext }: MultiResumePickerProps) {
-  const [resumes, setResumes] = useState<ResumeRecord[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showUpload, setShowUpload] = useState(true);
-
+export function MultiResumePicker({
+  onNext,
+  resumes,
+  selectedIds,
+  showUpload,
+  onResumesChange,
+  onSelectedIdsChange,
+  onShowUploadChange,
+}: MultiResumePickerProps) {
   function toggle(fileId: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(fileId)) next.delete(fileId);
-      else next.add(fileId);
-      return next;
-    });
+    const set = new Set(selectedIds);
+    if (set.has(fileId)) set.delete(fileId);
+    else set.add(fileId);
+    onSelectedIdsChange(Array.from(set));
   }
 
   function selectAll() {
-    if (selectedIds.size === resumes.length) {
-      setSelectedIds(new Set());
+    if (selectedIds.length === resumes.length) {
+      onSelectedIdsChange([]);
     } else {
-      setSelectedIds(new Set(resumes.map((r) => r.file_id)));
+      onSelectedIdsChange(resumes.map((r) => r.file_id));
     }
   }
 
   function handleUploaded(resume: ResumeRecord) {
-    setResumes((prev) => [resume, ...prev]);
-    setSelectedIds((prev) => new Set(prev).add(resume.file_id));
-    setShowUpload(false);
+    onResumesChange([resume, ...resumes]);
+    onSelectedIdsChange([...selectedIds, resume.file_id]);
+    onShowUploadChange(false);
   }
 
   return (
@@ -51,7 +58,7 @@ export function MultiResumePicker({ onNext }: MultiResumePickerProps) {
       {/* Actions */}
       {resumes.length > 1 && (
         <Button variant="ghost" size="sm" onClick={selectAll} className="gap-2 -ml-2">
-          {selectedIds.size === resumes.length ? (
+          {selectedIds.length === resumes.length ? (
             <><CheckSquare className="h-4 w-4" /> Deselect all</>
           ) : (
             <><Square className="h-4 w-4" /> Select all ({resumes.length})</>
@@ -63,7 +70,7 @@ export function MultiResumePicker({ onNext }: MultiResumePickerProps) {
       {resumes.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">
           {resumes.map((r) => {
-            const selected = selectedIds.has(r.file_id);
+            const selected = selectedIds.includes(r.file_id);
             return (
               <button
                 key={r.file_id}
@@ -102,13 +109,12 @@ export function MultiResumePicker({ onNext }: MultiResumePickerProps) {
         <div className="rounded-lg border border-border p-4">
           <ResumeUpload
             onUploaded={handleUploaded}
-            onCancel={resumes.length > 0 ? () => setShowUpload(false) : undefined}
+            onCancel={resumes.length > 0 ? () => onShowUploadChange(false) : undefined}
             isCandidate={false}
-            buttonLabel="Process resume"
           />
         </div>
       ) : (
-        <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowUpload(true)}>
+        <Button variant="outline" size="sm" className="gap-2" onClick={() => onShowUploadChange(true)}>
           <Plus className="h-4 w-4" /> Upload another resume
         </Button>
       )}
@@ -116,15 +122,14 @@ export function MultiResumePicker({ onNext }: MultiResumePickerProps) {
       {/* Next */}
       <div className="pt-2">
         <Button
-          disabled={selectedIds.size === 0}
+          disabled={selectedIds.length === 0}
           onClick={() => {
-            const ids = Array.from(selectedIds);
-            const selected = resumes.filter((r) => ids.includes(r.file_id));
-            onNext(ids, selected);
+            const selected = resumes.filter((r) => selectedIds.includes(r.file_id));
+            onNext(selectedIds, selected);
           }}
           className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
         >
-          Continue ({selectedIds.size} selected)
+          Continue ({selectedIds.length} selected)
         </Button>
       </div>
     </div>

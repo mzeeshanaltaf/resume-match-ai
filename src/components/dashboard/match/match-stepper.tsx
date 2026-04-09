@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { useDashboardData } from "@/contexts/dashboard-data";
 import { ResumePicker } from "./resume-picker";
 import { MatchResults } from "./match-results";
-import type { ResumeMatchResponse } from "@/types/n8n";
+import type { ResumeMatchResponse, ResumeRecord } from "@/types/n8n";
 import { ShimmeringProgressDialog, type ProgressStep } from "@/components/dashboard/shimmering-progress-dialog";
 
 const JD_URL_STEPS: ProgressStep[] = [
@@ -46,6 +46,10 @@ export function MatchStepper() {
   const { refreshAll } = useDashboardData();
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
+  // Picker state lifted here so going Back preserves uploaded resumes
+  const [pickerResumes, setPickerResumes] = useState<ResumeRecord[]>([]);
+  const [pickerSelectedId, setPickerSelectedId] = useState<string | null>(null);
+  const [pickerShowUpload, setPickerShowUpload] = useState(true);
   const [jdMode, setJdMode] = useState<"url" | "text">("url");
   const [url, setUrl] = useState("");
   const [jdText, setJdText] = useState("");
@@ -62,6 +66,9 @@ export function MatchStepper() {
   function reset() {
     setCurrentStep(1);
     setSelectedResumeId(null);
+    setPickerResumes([]);
+    setPickerSelectedId(null);
+    setPickerShowUpload(true);
     setJdMode("url");
     setUrl("");
     setJdText("");
@@ -235,6 +242,12 @@ export function MatchStepper() {
               setSelectedResumeId(fileId);
               setCurrentStep(2);
             }}
+            resumes={pickerResumes}
+            selectedId={pickerSelectedId}
+            showUpload={pickerShowUpload}
+            onResumesChange={setPickerResumes}
+            onSelectedIdChange={setPickerSelectedId}
+            onShowUploadChange={setPickerShowUpload}
           />
         )}
 

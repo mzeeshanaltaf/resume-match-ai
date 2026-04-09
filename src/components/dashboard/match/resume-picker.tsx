@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { FileText, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,17 +8,27 @@ import type { ResumeRecord } from "@/types/n8n";
 
 interface ResumePickerProps {
   onNext: (fileId: string) => void;
+  resumes: ResumeRecord[];
+  selectedId: string | null;
+  showUpload: boolean;
+  onResumesChange: (resumes: ResumeRecord[]) => void;
+  onSelectedIdChange: (id: string | null) => void;
+  onShowUploadChange: (show: boolean) => void;
 }
 
-export function ResumePicker({ onNext }: ResumePickerProps) {
-  const [resumes, setResumes] = useState<ResumeRecord[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showUpload, setShowUpload] = useState(true);
-
+export function ResumePicker({
+  onNext,
+  resumes,
+  selectedId,
+  showUpload,
+  onResumesChange,
+  onSelectedIdChange,
+  onShowUploadChange,
+}: ResumePickerProps) {
   function handleUploaded(resume: ResumeRecord) {
-    setResumes((prev) => [resume, ...prev]);
-    setSelectedId(resume.file_id);
-    setShowUpload(false);
+    onResumesChange([resume, ...resumes]);
+    onSelectedIdChange(resume.file_id);
+    onShowUploadChange(false);
   }
 
   return (
@@ -37,7 +46,7 @@ export function ResumePicker({ onNext }: ResumePickerProps) {
           {resumes.map((r, i) => (
             <button
               key={r.file_id || `resume-${i}`}
-              onClick={() => { setSelectedId(r.file_id); setShowUpload(false); }}
+              onClick={() => { onSelectedIdChange(r.file_id); onShowUploadChange(false); }}
               className={cn(
                 "relative flex items-start gap-3 rounded-lg border p-4 text-left transition-colors",
                 selectedId === r.file_id
@@ -74,7 +83,7 @@ export function ResumePicker({ onNext }: ResumePickerProps) {
         <div className="rounded-lg border border-border p-4">
           <ResumeUpload
             onUploaded={handleUploaded}
-            onCancel={resumes.length > 0 ? () => setShowUpload(false) : undefined}
+            onCancel={resumes.length > 0 ? () => onShowUploadChange(false) : undefined}
           />
         </div>
       )}

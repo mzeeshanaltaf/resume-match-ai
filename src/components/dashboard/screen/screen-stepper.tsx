@@ -11,6 +11,7 @@ import { useDashboardData } from "@/contexts/dashboard-data";
 import { MultiResumePicker } from "./multi-resume-picker";
 import { ScreenResults, type ScreenResultItem } from "./screen-results";
 import type { ResumeRecord, ResumeMatchResponse } from "@/types/n8n";
+
 import { ShimmeringProgressDialog, type ProgressStep } from "@/components/dashboard/shimmering-progress-dialog";
 
 const JD_URL_STEPS: ProgressStep[] = [
@@ -36,7 +37,7 @@ const SCREENING_STEPS: ProgressStep[] = [
 type Step = 1 | 2 | 3 | 4;
 
 const STEPS = [
-  { id: 1, label: "Upload resumes" },
+  { id: 1, label: "Resumes" },
   { id: 2, label: "Job description" },
   { id: 3, label: "Screening" },
   { id: 4, label: "Results" },
@@ -45,6 +46,10 @@ const STEPS = [
 export function ScreenStepper() {
   const { refreshAll } = useDashboardData();
   const [currentStep, setCurrentStep] = useState<Step>(1);
+  // Picker state lifted here so going Back preserves uploaded resumes
+  const [pickerResumes, setPickerResumes] = useState<ResumeRecord[]>([]);
+  const [pickerSelectedIds, setPickerSelectedIds] = useState<string[]>([]);
+  const [pickerShowUpload, setPickerShowUpload] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedResumes, setSelectedResumes] = useState<ResumeRecord[]>([]);
   const [results, setResults] = useState<ScreenResultItem[]>([]);
@@ -59,6 +64,9 @@ export function ScreenStepper() {
 
   function reset() {
     setCurrentStep(1);
+    setPickerResumes([]);
+    setPickerSelectedIds([]);
+    setPickerShowUpload(true);
     setSelectedIds([]);
     setSelectedResumes([]);
     setResults([]);
@@ -230,6 +238,12 @@ export function ScreenStepper() {
               setSelectedResumes(resumes);
               setCurrentStep(2);
             }}
+            resumes={pickerResumes}
+            selectedIds={pickerSelectedIds}
+            showUpload={pickerShowUpload}
+            onResumesChange={setPickerResumes}
+            onSelectedIdsChange={setPickerSelectedIds}
+            onShowUploadChange={setPickerShowUpload}
           />
         )}
 

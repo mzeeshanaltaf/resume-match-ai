@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Plus, CheckCircle2 } from "lucide-react";
+import { FileText, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ResumeUpload } from "./resume-upload";
@@ -70,22 +70,13 @@ export function ResumePicker({ onNext }: ResumePickerProps) {
       )}
 
       {/* Upload area */}
-      {showUpload ? (
+      {showUpload && (
         <div className="rounded-lg border border-border p-4">
           <ResumeUpload
             onUploaded={handleUploaded}
             onCancel={resumes.length > 0 ? () => setShowUpload(false) : undefined}
           />
         </div>
-      ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={() => setShowUpload(true)}
-        >
-          <Plus className="h-4 w-4" /> Upload another resume
-        </Button>
       )}
 
       {/* Next button */}

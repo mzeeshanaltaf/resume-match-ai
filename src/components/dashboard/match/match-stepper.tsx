@@ -11,6 +11,27 @@ import { useDashboardData } from "@/contexts/dashboard-data";
 import { ResumePicker } from "./resume-picker";
 import { MatchResults } from "./match-results";
 import type { ResumeMatchResponse } from "@/types/n8n";
+import { ShimmeringProgressDialog, type ProgressStep } from "@/components/dashboard/shimmering-progress-dialog";
+
+const JD_URL_STEPS: ProgressStep[] = [
+  { message: "Getting Job Description...", duration: 5000 },
+  { message: "Analyzing Job Description...", duration: 5000 },
+  { message: "Extracting Details...", duration: 10000 },
+  { message: "Almost there...", duration: Infinity },
+];
+
+const JD_TEXT_STEPS: ProgressStep[] = [
+  { message: "Analyzing Job Description...", duration: 5000 },
+  { message: "Extracting Details...", duration: 10000 },
+  { message: "Almost there...", duration: Infinity },
+];
+
+const ANALYZE_STEPS: ProgressStep[] = [
+  { message: "Analyzing Resume...", duration: 5000 },
+  { message: "Analyzing Job Description...", duration: 5000 },
+  { message: "Generating Report...", duration: 15000 },
+  { message: "Almost there...", duration: Infinity },
+];
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -151,6 +172,17 @@ export function MatchStepper() {
   const jdReady = jdMode === "url" ? !!url.trim() : !!jdText.trim();
 
   return (
+    <>
+    <ShimmeringProgressDialog
+      open={jdStatus === "processing"}
+      title="Processing Job Description"
+      steps={jdMode === "url" ? JD_URL_STEPS : JD_TEXT_STEPS}
+    />
+    <ShimmeringProgressDialog
+      open={matchLoading}
+      title="Analyzing"
+      steps={ANALYZE_STEPS}
+    />
     <div className="space-y-8">
       {/* Step indicator */}
       <nav aria-label="Progress" className="flex items-center gap-0">
@@ -376,5 +408,6 @@ export function MatchStepper() {
         )}
       </div>
     </div>
+    </>
   );
 }

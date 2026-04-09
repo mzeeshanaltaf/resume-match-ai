@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, Loader2, ArrowLeft, ScanSearch } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -10,6 +11,27 @@ import { useDashboardData } from "@/contexts/dashboard-data";
 import { MultiResumePicker } from "./multi-resume-picker";
 import { ScreenResults, type ScreenResultItem } from "./screen-results";
 import type { ResumeRecord, ResumeMatchResponse } from "@/types/n8n";
+import { ShimmeringProgressDialog, type ProgressStep } from "@/components/dashboard/shimmering-progress-dialog";
+
+const JD_URL_STEPS: ProgressStep[] = [
+  { message: "Getting Job Description...", duration: 5000 },
+  { message: "Analyzing Job Description...", duration: 5000 },
+  { message: "Extracting Details...", duration: 10000 },
+  { message: "Almost there...", duration: Infinity },
+];
+
+const JD_TEXT_STEPS: ProgressStep[] = [
+  { message: "Analyzing Job Description...", duration: 5000 },
+  { message: "Extracting Details...", duration: 10000 },
+  { message: "Almost there...", duration: Infinity },
+];
+
+const SCREENING_STEPS: ProgressStep[] = [
+  { message: "Analyzing Resume...", duration: 5000 },
+  { message: "Analyzing Job Description...", duration: 5000 },
+  { message: "Generating Report...", duration: 5000 },
+  { message: "Almost there...", duration: Infinity },
+];
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -26,7 +48,9 @@ export function ScreenStepper() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedResumes, setSelectedResumes] = useState<ResumeRecord[]>([]);
   const [results, setResults] = useState<ScreenResultItem[]>([]);
+  const [jdMode, setJdMode] = useState<"url" | "text">("url");
   const [url, setUrl] = useState("");
+  const [jdText, setJdText] = useState("");
   const [urlId, setUrlId] = useState("");
   const [processingJd, setProcessingJd] = useState(false);
   const [screening, setScreening] = useState(false);
@@ -38,7 +62,9 @@ export function ScreenStepper() {
     setSelectedIds([]);
     setSelectedResumes([]);
     setResults([]);
+    setJdMode("url");
     setUrl("");
+    setJdText("");
     setUrlId("");
     setProcessingJd(false);
     setScreening(false);
@@ -47,22 +73,36 @@ export function ScreenStepper() {
   }
 
   async function processJd() {
-    if (!url.trim()) {
-      toast.error("Please enter a job posting URL.");
-      return;
-    }
-    try {
-      new URL(url.trim());
-    } catch {
-      toast.error("Please enter a valid URL.");
-      return;
+    if (jdMode === "url") {
+      if (!url.trim()) {
+        toast.error("Please enter a job posting URL.");
+        return;
+      }
+      try {
+        new URL(url.trim());
+      } catch {
+        toast.error("Please enter a valid URL.");
+        return;
+      }
+    } else {
+      if (!jdText.trim()) {
+        toast.error("Please paste the job description text.");
+        return;
+      }
     }
     setProcessingJd(true);
     try {
+      const jdBody: Record<string, unknown> = { is_candidate: false };
+      if (jdMode === "url") {
+        jdBody.url = url.trim();
+      } else {
+        jdBody.url = "";
+        jdBody.jd_text = jdText.trim();
+      }
       const jdRes = await fetch("/api/jd/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim(), is_candidate: false }),
+        body: JSON.stringify(jdBody),
       });
       if (!jdRes.ok) throw new Error("Failed to process job description.");
       const { url_id } = await jdRes.json();
@@ -131,6 +171,17 @@ export function ScreenStepper() {
   }
 
   return (
+    <>
+    <ShimmeringProgressDialog
+      open={processingJd}
+      title="Processing Job Description"
+      steps={jdMode === "url" ? JD_URL_STEPS : JD_TEXT_STEPS}
+    />
+    <ShimmeringProgressDialog
+      open={screening}
+      title="Screening"
+      steps={SCREENING_STEPS}
+    />
     <div className="space-y-8">
       {/* Step indicator */}
       <nav aria-label="Progress" className="flex items-center gap-0">
@@ -193,14 +244,45 @@ export function ScreenStepper() {
               </p>
             </div>
 
-            <Input
-              type="url"
-              placeholder="https://company.com/careers/job-title"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && processJd()}
-              className="max-w-lg"
-            />
+            <div className="flex gap-1 rounded-lg border border-border p-1 w-fit bg-muted/30">
+              <button
+                onClick={() => setJdMode("url")}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  jdMode === "url" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Job URL
+              </button>
+              <button
+                onClick={() => setJdMode("text")}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  jdMode === "text" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Paste text
+              </button>
+            </div>
+
+            {jdMode === "url" ? (
+              <Input
+                type="url"
+                placeholder="https://company.com/careers/job-title"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && processJd()}
+                className="max-w-lg"
+              />
+            ) : (
+              <Textarea
+                placeholder="Paste the full job description here…"
+                value={jdText}
+                onChange={(e) => setJdText(e.target.value)}
+                rows={8}
+                className="max-w-lg"
+              />
+            )}
 
             <div className="flex gap-2 pt-1">
               <Button variant="ghost" size="sm" onClick={() => setCurrentStep(1)} className="gap-1">
@@ -208,7 +290,7 @@ export function ScreenStepper() {
               </Button>
               <Button
                 onClick={processJd}
-                disabled={!url.trim() || processingJd}
+                disabled={(jdMode === "url" ? !url.trim() : !jdText.trim()) || processingJd}
                 className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
               >
                 {processingJd ? (
@@ -293,5 +375,6 @@ export function ScreenStepper() {
         )}
       </div>
     </div>
+    </>
   );
 }

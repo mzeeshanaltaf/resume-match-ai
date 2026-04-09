@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { ResumeRecord } from "@/types/n8n";
+import { ShimmeringProgressDialog, type ProgressStep } from "@/components/dashboard/shimmering-progress-dialog";
+
+const RESUME_STEPS: ProgressStep[] = [
+  { message: "Analyzing Resume...", duration: 5000 },
+  { message: "Extracting Details...", duration: 5000 },
+  { message: "Almost there...", duration: Infinity },
+];
 
 interface ResumeUploadProps {
   onUploaded: (resume: ResumeRecord) => void;
@@ -67,6 +74,8 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
   }
 
   return (
+    <>
+    <ShimmeringProgressDialog open={uploading} title="Processing Resume" steps={RESUME_STEPS} />
     <div className="space-y-4">
       {!file ? (
         <div
@@ -130,5 +139,6 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
         )}
       </div>
     </div>
+    </>
   );
 }

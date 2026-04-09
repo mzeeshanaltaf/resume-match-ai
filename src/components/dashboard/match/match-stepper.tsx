@@ -174,7 +174,7 @@ export function MatchStepper() {
   return (
     <>
     <ShimmeringProgressDialog
-      open={jdStatus === "processing"}
+      open={currentStep === 3 && jdStatus === "processing"}
       title="Processing Job Description"
       steps={jdMode === "url" ? JD_URL_STEPS : JD_TEXT_STEPS}
     />
@@ -306,16 +306,8 @@ export function MatchStepper() {
         {/* Step 3: Analyze Match */}
         {currentStep === 3 && (
           <div className="flex flex-col items-center py-12 text-center">
-            {/* Sub-state: Processing JD */}
-            {jdStatus === "processing" && (
-              <>
-                <Loader2 className="mb-4 h-10 w-10 animate-spin text-emerald-500" />
-                <h2 className="text-lg font-semibold">Processing job description</h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Extracting requirements from the job posting…
-                </p>
-              </>
-            )}
+            {/* Sub-state: Processing JD — inline content hidden; ShimmeringProgressDialog handles UX */}
+            {jdStatus === "processing" && null}
 
             {/* Sub-state: JD failed */}
             {jdStatus === "error" && (
@@ -366,16 +358,8 @@ export function MatchStepper() {
               </>
             )}
 
-            {/* Sub-state: Match running */}
-            {jdStatus === "done" && matchLoading && (
-              <>
-                <Loader2 className="mb-4 h-10 w-10 animate-spin text-emerald-500" />
-                <h2 className="text-lg font-semibold">Analyzing match</h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Comparing your resume against the job requirements…
-                </p>
-              </>
-            )}
+            {/* Sub-state: Match running — inline content hidden; ShimmeringProgressDialog handles UX */}
+            {jdStatus === "done" && matchLoading && null}
 
             {/* Sub-state: Match failed */}
             {jdStatus === "done" && matchError && !matchLoading && (

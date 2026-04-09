@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useDashboardData } from "@/contexts/dashboard-data";
 import { HistoryTable } from "@/components/dashboard/history/history-table";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,8 @@ import { ArrowRight } from "lucide-react";
 
 export default function HistoryPage() {
   const { matches, resumes, loading } = useDashboardData();
+  const searchParams = useSearchParams();
+  const defaultTab = searchParams.get("tab") === "screener" ? "screener" : "job_fit";
 
   if (loading) {
     return (
@@ -61,7 +64,7 @@ export default function HistoryPage() {
         </Button>
       </div>
 
-      <HistoryTable initialMatches={matches ?? []} resumes={resumes ?? []} />
+      <HistoryTable initialMatches={matches ?? []} resumes={resumes ?? []} defaultTab={defaultTab} />
     </div>
   );
 }

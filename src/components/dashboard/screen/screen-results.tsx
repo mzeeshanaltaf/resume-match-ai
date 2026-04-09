@@ -1,8 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RotateCcw, AlertCircle } from "lucide-react";
+import { RotateCcw, AlertCircle, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ResumeMatchResponse } from "@/types/n8n";
 
@@ -52,6 +53,7 @@ interface ScreenResultsProps {
 }
 
 export function ScreenResults({ items, onReset }: ScreenResultsProps) {
+  const router = useRouter();
   const successful = items
     .filter((i): i is ScreenResultItem & { status: "success"; result: ResumeMatchResponse } =>
       i.status === "success" && !!i.result
@@ -125,10 +127,21 @@ export function ScreenResults({ items, onReset }: ScreenResultsProps) {
         </div>
       )}
 
-      <Button variant="outline" size="sm" className="gap-2" onClick={onReset}>
-        <RotateCcw className="h-4 w-4" />
-        New screening
-      </Button>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" className="gap-2" onClick={onReset}>
+          <RotateCcw className="h-4 w-4" />
+          New screening
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => router.push("/dashboard/history?tab=screener")}
+        >
+          <History className="h-4 w-4" />
+          History
+        </Button>
+      </div>
     </div>
   );
 }

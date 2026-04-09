@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Loader2, ArrowLeft, ScanSearch } from "lucide-react";
+import { CheckCircle2, ArrowLeft, ScanSearch } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -293,11 +293,8 @@ export function ScreenStepper() {
                 disabled={(jdMode === "url" ? !url.trim() : !jdText.trim()) || processingJd}
                 className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
               >
-                {processingJd ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Processing…</>
-                ) : (
-                  <><ScanSearch className="h-4 w-4" /> Process JD</>
-                )}
+                <><ScanSearch className="h-4 w-4" /> Process JD</>
+
               </Button>
             </div>
           </div>
@@ -328,24 +325,8 @@ export function ScreenStepper() {
                 </div>
               </>
             ) : screening ? (
-              <>
-                <Loader2 className="mb-4 h-10 w-10 animate-spin text-emerald-500" />
-                <h2 className="text-lg font-semibold">Screening resumes</h2>
-                <p className="mt-2 text-sm text-muted-foreground">{progress.status}</p>
-                {progress.total > 0 && (
-                  <div className="mt-4 w-48">
-                    <div className="h-1.5 rounded-full bg-border overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                        style={{ width: `${(progress.done / progress.total) * 100}%` }}
-                      />
-                    </div>
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      {progress.done} / {progress.total}
-                    </p>
-                  </div>
-                )}
-              </>
+              /* ShimmeringProgressDialog handles UX during screening */
+              null
             ) : (
               <>
                 <ScanSearch className="mb-4 h-10 w-10 text-emerald-500" />

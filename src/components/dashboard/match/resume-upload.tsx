@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, DragEvent } from "react";
-import { Upload, FileText, X, Loader2 } from "lucide-react";
+import { Upload, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -126,11 +126,8 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
           size="sm"
           className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
         >
-          {uploading ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</>
-          ) : (
-            <><Upload className="h-4 w-4" /> {buttonLabel}</>
-          )}
+          <><Upload className="h-4 w-4" /> {buttonLabel}</>
+
         </Button>
         {onCancel && (
           <Button variant="ghost" size="sm" onClick={onCancel}>

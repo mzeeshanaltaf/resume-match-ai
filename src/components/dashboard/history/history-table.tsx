@@ -37,11 +37,15 @@ import {
   Target,
   ScanSearch,
   FileText,
+  ExternalLink,
+  Building2,
+  MapPin,
+  Briefcase,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MatchDetailDialog } from "./match-detail-dialog";
 import { cn } from "@/lib/utils";
-import type { JobMatchSummary, ResumeRecord } from "@/types/n8n";
+import type { JobMatchSummary, ResumeRecord, JobDescription } from "@/types/n8n";
 
 const PdfViewer = dynamic(
   () => import("@/components/pdf-viewer").then((m) => ({ default: m.PdfViewer })),
@@ -79,7 +83,7 @@ function formatDate(iso: string) {
 }
 
 
-export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobMatchSummary[]; resumes: ResumeRecord[] }) {
+export function HistoryTable({ initialMatches, resumes, defaultTab = "job_fit" }: { initialMatches: JobMatchSummary[]; resumes: ResumeRecord[]; defaultTab?: Tab }) {
   const [matches, setMatches] = useState<JobMatchSummary[]>(initialMatches);
   useEffect(() => { setMatches(initialMatches); }, [initialMatches]);
 
@@ -91,11 +95,12 @@ export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobM
     }
     return map;
   }, [resumes]);
-  const [activeTab, setActiveTab] = useState<Tab>("job_fit");
+  const [activeTab, setActiveTab] = useState<Tab>(defaultTab);
   const [filter, setFilter] = useState("");
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [viewMatch, setViewMatch] = useState<JobMatchSummary | null>(null);
+  const [viewJd, setViewJd] = useState<{ jd: JobDescription; jdUrl?: string } | null>(null);
   const [previewResume, setPreviewResume] = useState<{ base64: string; fileName: string } | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<JobMatchSummary | null>(null);
@@ -264,7 +269,7 @@ export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobM
                 const score = getScore(match);
                 return (
                   <TableRow key={`${key}_${i}`} className={cn(isDeleting && "opacity-50")}>
-                    <TableCell className="font-medium max-w-[160px]">
+                    <TableCell className="font-medium max-w-40">
                       {base64Map.has(match.file_id) ? (
                         <button
                           onClick={() =>
@@ -287,20 +292,28 @@ export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobM
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="max-w-[200px]">
-                      {match.jd_url && match.jd_url.trim() !== "" ? (
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {match.jd_url}
-                        </span>
-                      ) : match.job_description?.company_name || match.job_description?.job_title ? (
-                        <div className="min-w-0">
-                          <span className="block truncate text-xs font-medium">
-                            {match.job_description.company_name}
-                          </span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {match.job_description.job_title}
-                          </span>
-                        </div>
+                    <TableCell className="max-w-50">
+                      {match.job_description || match.jd_url ? (
+                        <button
+                          onClick={() => setViewJd({ jd: match.job_description!, jdUrl: match.jd_url })}
+                          className="group text-left min-w-0 w-full"
+                          title="Preview job description"
+                        >
+                          {match.job_description?.company_name || match.job_description?.job_title ? (
+                            <div className="min-w-0">
+                              <span className="block truncate text-xs font-medium group-hover:text-emerald-600 dark:group-hover:text-emerald-400 underline decoration-dotted underline-offset-2 transition-colors">
+                                {match.job_description.company_name}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {match.job_description.job_title}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="block truncate text-xs text-muted-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 underline decoration-dotted underline-offset-2 transition-colors">
+                              {match.jd_url}
+                            </span>
+                          )}
+                        </button>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
@@ -349,6 +362,124 @@ export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobM
           </Table>
         </div>
       )}
+
+      {/* Job Description Preview Dialog */}
+      <Dialog open={!!viewJd} onOpenChange={(open) => !open && setViewJd(null)}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">
+              Job Description
+            </DialogTitle>
+          </DialogHeader>
+          {viewJd && (
+            <div className="space-y-5 pt-1">
+              {/* Header info */}
+              <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-2">
+                {viewJd.jd?.job_title && (
+                  <h2 className="text-lg font-semibold">{viewJd.jd.job_title}</h2>
+                )}
+                <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                  {viewJd.jd?.company_name && (
+                    <span className="flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5" /> {viewJd.jd.company_name}
+                    </span>
+                  )}
+                  {viewJd.jd?.location && (
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5" /> {viewJd.jd.location}
+                    </span>
+                  )}
+                  {viewJd.jd?.employment_type && (
+                    <span className="flex items-center gap-1.5">
+                      <Briefcase className="h-3.5 w-3.5" /> {viewJd.jd.employment_type}
+                    </span>
+                  )}
+                </div>
+                {viewJd.jdUrl && (
+                  <a
+                    href={viewJd.jdUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:underline mt-1"
+                  >
+                    <ExternalLink className="h-3 w-3" /> {viewJd.jdUrl}
+                  </a>
+                )}
+              </div>
+
+              {/* Description */}
+              {viewJd.jd?.description && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">Description</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                    {viewJd.jd.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Responsibilities */}
+              {viewJd.jd?.responsibilities?.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">Responsibilities</h3>
+                  <ul className="space-y-1.5">
+                    {viewJd.jd.responsibilities.map((r, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-muted-foreground">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Requirements */}
+              {viewJd.jd?.requirements?.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">Requirements</h3>
+                  <ul className="space-y-1.5">
+                    {viewJd.jd.requirements.map((r, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-muted-foreground">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Benefits */}
+              {viewJd.jd?.benefits?.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">Benefits</h3>
+                  <ul className="space-y-1.5">
+                    {viewJd.jd.benefits.map((b, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-muted-foreground">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Fallback: jd_url only, no structured data */}
+              {!viewJd.jd && viewJd.jdUrl && (
+                <div className="rounded-lg border border-border p-4 text-center">
+                  <p className="text-sm text-muted-foreground mb-3">No parsed job details available.</p>
+                  <a
+                    href={viewJd.jdUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400 hover:underline"
+                  >
+                    <ExternalLink className="h-4 w-4" /> Open job posting
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* PDF Preview Dialog */}
       <Dialog open={!!previewResume} onOpenChange={(open) => !open && setPreviewResume(null)}>

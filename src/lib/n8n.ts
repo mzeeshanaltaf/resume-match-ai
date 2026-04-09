@@ -11,7 +11,9 @@ const N8N_API_KEY = process.env.N8N_API_KEY;
 export class N8nError extends Error {
   constructor(
     message: string,
-    public readonly status?: number
+    public readonly status?: number,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    public readonly body?: any
   ) {
     super(message);
     this.name = "N8nError";
@@ -48,9 +50,12 @@ export async function callN8nWebhook<TResponse = unknown>(
   });
 
   if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore parse errors */ }
     throw new N8nError(
       `n8n webhook call failed: ${response.statusText}`,
-      response.status
+      response.status,
+      body
     );
   }
 
@@ -88,9 +93,12 @@ export async function callN8nWebhookMultipart<TResponse = unknown>(
   });
 
   if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore parse errors */ }
     throw new N8nError(
       `n8n webhook call failed: ${response.statusText}`,
-      response.status
+      response.status,
+      body
     );
   }
 

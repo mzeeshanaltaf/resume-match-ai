@@ -45,7 +45,7 @@ import {
 import { toast } from "sonner";
 import { MatchDetailDialog } from "./match-detail-dialog";
 import { cn } from "@/lib/utils";
-import type { JobMatchSummary, ResumeRecord, JobDescription } from "@/types/n8n";
+import type { JobMatchSummary, ResumeRecord, JdRecord, JobDescription } from "@/types/n8n";
 
 const PdfViewer = dynamic(
   () => import("@/components/pdf-viewer").then((m) => ({ default: m.PdfViewer })),
@@ -83,7 +83,11 @@ function formatDate(iso: string) {
 }
 
 
-export function HistoryTable({ initialMatches, resumes, defaultTab = "job_fit" }: { initialMatches: JobMatchSummary[]; resumes: ResumeRecord[]; defaultTab?: Tab }) {
+function isValidUrl(str: string) {
+  try { new URL(str); return true; } catch { return false; }
+}
+
+export function HistoryTable({ initialMatches, resumes, jds = [], defaultTab = "job_fit" }: { initialMatches: JobMatchSummary[]; resumes: ResumeRecord[]; jds?: JdRecord[]; defaultTab?: Tab }) {
   const [matches, setMatches] = useState<JobMatchSummary[]>(initialMatches);
   useEffect(() => { setMatches(initialMatches); }, [initialMatches]);
 
@@ -95,12 +99,21 @@ export function HistoryTable({ initialMatches, resumes, defaultTab = "job_fit" }
     }
     return map;
   }, [resumes]);
+
+  // Build url_id → JdRecord lookup for JD preview
+  const jdMap = useMemo(() => {
+    const map = new Map<string, JdRecord>();
+    for (const j of jds) {
+      if (j.url_id) map.set(j.url_id, j);
+    }
+    return map;
+  }, [jds]);
   const [activeTab, setActiveTab] = useState<Tab>(defaultTab);
   const [filter, setFilter] = useState("");
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [viewMatch, setViewMatch] = useState<JobMatchSummary | null>(null);
-  const [viewJd, setViewJd] = useState<{ jd: JobDescription; jdUrl?: string } | null>(null);
+  const [viewJd, setViewJd] = useState<{ jd: JobDescription | null; jdUrl?: string } | null>(null);
   const [previewResume, setPreviewResume] = useState<{ base64: string; fileName: string } | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<JobMatchSummary | null>(null);
@@ -293,9 +306,17 @@ export function HistoryTable({ initialMatches, resumes, defaultTab = "job_fit" }
                       )}
                     </TableCell>
                     <TableCell className="max-w-50">
-                      {match.job_description || match.jd_url ? (
+                      {(match.url_id && jdMap.has(match.url_id)) || match.jd_url ? (
                         <button
-                          onClick={() => setViewJd({ jd: match.job_description!, jdUrl: match.jd_url })}
+                          onClick={() => {
+                            const jdRecord = match.url_id ? jdMap.get(match.url_id) : undefined;
+                            const jdObj = jdRecord?.jd_object as JobDescription | undefined ?? null;
+                            const rawUrl = match.jd_url ?? jdRecord?.jd_url;
+                            setViewJd({
+                              jd: jdObj,
+                              jdUrl: rawUrl && isValidUrl(rawUrl) ? rawUrl : undefined,
+                            });
+                          }}
                           className="group text-left min-w-0 w-full"
                           title="Preview job description"
                         >
@@ -368,61 +389,65 @@ export function HistoryTable({ initialMatches, resumes, defaultTab = "job_fit" }
         <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base font-semibold">
-              Job Description
+              {viewJd?.jd?.job_title ?? "Job Description"}
             </DialogTitle>
           </DialogHeader>
-          {viewJd && (
+          {viewJd && (() => {
+            const jd = viewJd.jd;
+            return (
             <div className="space-y-5 pt-1">
               {/* Header info */}
-              <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-2">
-                {viewJd.jd?.job_title && (
-                  <h2 className="text-lg font-semibold">{viewJd.jd.job_title}</h2>
-                )}
-                <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-                  {viewJd.jd?.company_name && (
-                    <span className="flex items-center gap-1.5">
-                      <Building2 className="h-3.5 w-3.5" /> {viewJd.jd.company_name}
-                    </span>
+              {(jd || viewJd.jdUrl) && (
+                <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-2">
+                  {jd?.job_title && (
+                    <h2 className="text-lg font-semibold">{jd.job_title}</h2>
                   )}
-                  {viewJd.jd?.location && (
-                    <span className="flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5" /> {viewJd.jd.location}
-                    </span>
-                  )}
-                  {viewJd.jd?.employment_type && (
-                    <span className="flex items-center gap-1.5">
-                      <Briefcase className="h-3.5 w-3.5" /> {viewJd.jd.employment_type}
-                    </span>
+                  <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                    {jd?.company_name && (
+                      <span className="flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5" /> {jd.company_name}
+                      </span>
+                    )}
+                    {jd?.location && (
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5" /> {jd.location}
+                      </span>
+                    )}
+                    {jd?.employment_type && (
+                      <span className="flex items-center gap-1.5">
+                        <Briefcase className="h-3.5 w-3.5" /> {jd.employment_type}
+                      </span>
+                    )}
+                  </div>
+                  {viewJd.jdUrl && (
+                    <a
+                      href={viewJd.jdUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:underline mt-1"
+                    >
+                      <ExternalLink className="h-3 w-3" /> {viewJd.jdUrl}
+                    </a>
                   )}
                 </div>
-                {viewJd.jdUrl && (
-                  <a
-                    href={viewJd.jdUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:underline mt-1"
-                  >
-                    <ExternalLink className="h-3 w-3" /> {viewJd.jdUrl}
-                  </a>
-                )}
-              </div>
+              )}
 
               {/* Description */}
-              {viewJd.jd?.description && (
+              {jd?.description && (
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Description</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-                    {viewJd.jd.description}
+                    {jd.description}
                   </p>
                 </div>
               )}
 
               {/* Responsibilities */}
-              {viewJd.jd?.responsibilities?.length > 0 && (
+              {jd?.responsibilities && jd.responsibilities.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Responsibilities</h3>
                   <ul className="space-y-1.5">
-                    {viewJd.jd.responsibilities.map((r, i) => (
+                    {jd.responsibilities.map((r, i) => (
                       <li key={i} className="flex gap-2 text-sm text-muted-foreground">
                         <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
                         {r}
@@ -433,11 +458,11 @@ export function HistoryTable({ initialMatches, resumes, defaultTab = "job_fit" }
               )}
 
               {/* Requirements */}
-              {viewJd.jd?.requirements?.length > 0 && (
+              {jd?.requirements && jd.requirements.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Requirements</h3>
                   <ul className="space-y-1.5">
-                    {viewJd.jd.requirements.map((r, i) => (
+                    {jd.requirements.map((r, i) => (
                       <li key={i} className="flex gap-2 text-sm text-muted-foreground">
                         <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
                         {r}
@@ -448,11 +473,11 @@ export function HistoryTable({ initialMatches, resumes, defaultTab = "job_fit" }
               )}
 
               {/* Benefits */}
-              {viewJd.jd?.benefits?.length > 0 && (
+              {jd?.benefits && jd.benefits.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Benefits</h3>
                   <ul className="space-y-1.5">
-                    {viewJd.jd.benefits.map((b, i) => (
+                    {jd.benefits.map((b, i) => (
                       <li key={i} className="flex gap-2 text-sm text-muted-foreground">
                         <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
                         {b}
@@ -462,22 +487,15 @@ export function HistoryTable({ initialMatches, resumes, defaultTab = "job_fit" }
                 </div>
               )}
 
-              {/* Fallback: jd_url only, no structured data */}
-              {!viewJd.jd && viewJd.jdUrl && (
-                <div className="rounded-lg border border-border p-4 text-center">
-                  <p className="text-sm text-muted-foreground mb-3">No parsed job details available.</p>
-                  <a
-                    href={viewJd.jdUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400 hover:underline"
-                  >
-                    <ExternalLink className="h-4 w-4" /> Open job posting
-                  </a>
-                </div>
+              {/* Fallback: no structured data and no URL */}
+              {!jd && !viewJd.jdUrl && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No job details available.
+                </p>
               )}
             </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

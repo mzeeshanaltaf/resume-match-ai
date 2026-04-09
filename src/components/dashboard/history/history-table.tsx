@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import {
   Table,
   TableBody,
@@ -23,8 +24,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   ArrowUpDown,
-  Eye,
   Trash2,
   Search,
   Loader2,
@@ -36,6 +42,18 @@ import { toast } from "sonner";
 import { MatchDetailDialog } from "./match-detail-dialog";
 import { cn } from "@/lib/utils";
 import type { JobMatchSummary, ResumeRecord } from "@/types/n8n";
+
+const PdfViewer = dynamic(
+  () => import("@/components/pdf-viewer").then((m) => ({ default: m.PdfViewer })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-40 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    ),
+  }
+);
 
 type Tab = "job_fit" | "screener";
 type SortField = "match_score" | "updated_at";
@@ -60,15 +78,6 @@ function formatDate(iso: string) {
   });
 }
 
-function openPdfPreview(base64: string) {
-  const byteChars = atob(base64);
-  const byteNumbers = new Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) {
-    byteNumbers[i] = byteChars.charCodeAt(i);
-  }
-  const blob = new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
-  window.open(URL.createObjectURL(blob), "_blank");
-}
 
 export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobMatchSummary[]; resumes: ResumeRecord[] }) {
   const [matches, setMatches] = useState<JobMatchSummary[]>(initialMatches);
@@ -87,6 +96,7 @@ export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobM
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [viewMatch, setViewMatch] = useState<JobMatchSummary | null>(null);
+  const [previewResume, setPreviewResume] = useState<{ base64: string; fileName: string } | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<JobMatchSummary | null>(null);
 
@@ -243,7 +253,8 @@ export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobM
                     <ArrowUpDown className="h-3.5 w-3.5" />
                   </Button>
                 </TableHead>
-                <TableHead className="w-[100px]" />
+                <TableHead>Match Report</TableHead>
+                <TableHead className="w-15" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -256,7 +267,12 @@ export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobM
                     <TableCell className="font-medium max-w-[160px]">
                       {base64Map.has(match.file_id) ? (
                         <button
-                          onClick={() => openPdfPreview(base64Map.get(match.file_id)!)}
+                          onClick={() =>
+                            setPreviewResume({
+                              base64: base64Map.get(match.file_id)!,
+                              fileName: match.file_name ?? "resume.pdf",
+                            })
+                          }
                           className="flex items-center gap-1.5 text-left group"
                           title="Preview PDF"
                         >
@@ -301,31 +317,30 @@ export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobM
                       {match.updated_at ? formatDate(match.updated_at) : "—"}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => setViewMatch(match)}
-                          title="View details"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => setPendingDelete(match)}
-                          disabled={isDeleting}
-                          title="Delete"
-                        >
-                          {isDeleting ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setViewMatch(match)}
+                      >
+                        View Report
+                      </Button>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-red-600 dark:hover:text-red-500"
+                        onClick={() => setPendingDelete(match)}
+                        disabled={isDeleting}
+                        title="Delete"
+                      >
+                        {isDeleting ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );
@@ -334,6 +349,20 @@ export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobM
           </Table>
         </div>
       )}
+
+      {/* PDF Preview Dialog */}
+      <Dialog open={!!previewResume} onOpenChange={(open) => !open && setPreviewResume(null)}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold truncate">
+              {previewResume?.fileName ?? "Resume Preview"}
+            </DialogTitle>
+          </DialogHeader>
+          {previewResume && (
+            <PdfViewer base64={previewResume.base64} fileName={previewResume.fileName} />
+          )}
+        </DialogContent>
+      </Dialog>
 
       <MatchDetailDialog
         match={viewMatch}
@@ -353,7 +382,7 @@ export function HistoryTable({ initialMatches, resumes }: { initialMatches: JobM
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700"
               onClick={() => {
                 if (pendingDelete) {
                   handleDelete(pendingDelete);

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,41 @@ import {
   Target,
   Zap,
 } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "AI Resume Matcher — Score Your Resume Against Any Job",
+  description:
+    "Get an instant match score, keyword gaps, and rewrite suggestions for any job posting. Beat the ATS and land more interviews with ResuMatchAI.",
+  alternates: { canonical: "/" },
+};
+
+const softwareAppJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "ResuMatchAI",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  description:
+    "AI-powered resume analysis and job matching. Upload your resume, paste a job description, and get an instant match score with personalised recommendations.",
+  url: "https://resumatch.zeeshanai.cloud",
+  offers: [
+    {
+      "@type": "Offer",
+      name: "Free",
+      price: "0",
+      priceCurrency: "USD",
+      description: "5 resume analyses per month, basic match score, PDF export",
+    },
+    {
+      "@type": "Offer",
+      name: "Pro",
+      price: "12",
+      priceCurrency: "USD",
+      description:
+        "Unlimited analyses, detailed gap analysis, keyword recommendations, cover letter drafts, priority support",
+    },
+  ],
+};
 
 /* ─── Animation styles (CSS-only, server-component safe) ───────────── */
 const animStyles = `
@@ -140,6 +176,10 @@ const plans = [
 export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppJsonLd) }}
+      />
       <style>{animStyles}</style>
       <Navbar />
 

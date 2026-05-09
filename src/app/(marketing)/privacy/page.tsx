@@ -5,6 +5,7 @@ import { Footer } from "@/components/marketing/footer";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description: "ResuMatchAI Privacy Policy — how we collect, use, and protect your data.",
+  alternates: { canonical: "/privacy" },
 };
 
 const sections = [

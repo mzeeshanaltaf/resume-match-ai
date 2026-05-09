@@ -5,6 +5,15 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "ResuMatchAI",
+  url: "https://resumatch.zeeshanai.cloud",
+  logo: "https://resumatch.zeeshanai.cloud/icon",
+  sameAs: [],
+};
+
 const geist = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -47,6 +56,10 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
         <body className={`${geist.variable} font-sans antialiased`}>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+          />
           <ThemeProvider
             attribute="class"
             defaultTheme="system"

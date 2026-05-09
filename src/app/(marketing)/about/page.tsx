@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: "About",
   description:
     "Learn about ResuMatchAI — our mission to help job seekers land more interviews with AI-powered resume matching.",
+  alternates: { canonical: "/about" },
 };
 
 const values = [

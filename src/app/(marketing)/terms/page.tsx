@@ -5,6 +5,7 @@ import { Footer } from "@/components/marketing/footer";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description: "ResuMatchAI Terms of Service — the rules governing your use of our platform.",
+  alternates: { canonical: "/terms" },
 };
 
 const sections = [

@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     siteName: "ResuMatchAI",
     images: [
       {
-        url: "/opengraph-image",
+        url: "/opengraph-image.png",
         width: 1200,
         height: 630,
         alt: "ResuMatchAI — AI-powered resume and job matching tool",
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     title: "ResuMatchAI — Match Your Resume to Any Job, Instantly",
     description:
       "AI-powered resume analysis and job matching. Get an instant match score and tailored recommendations.",
-    images: ["/opengraph-image"],
+    images: ["/opengraph-image.png"],
   },
   robots: {
     index: true,

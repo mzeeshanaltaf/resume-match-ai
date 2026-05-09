@@ -41,6 +41,7 @@ An AI-powered SaaS application that matches resumes against job descriptions, pr
 - **Backend:** n8n webhooks (AI/data processing)
 - **Styling:** Tailwind CSS v4 with dark mode support
 - **State Management:** React Context API
+- **SEO:** robots.txt, XML sitemap, OG/Twitter image generation, JSON-LD structured data, PWA manifest
 
 ## Project Structure
 
@@ -48,7 +49,10 @@ An AI-powered SaaS application that matches resumes against job descriptions, pr
 src/
 ├── app/
 │   ├── (marketing)/          # Public marketing pages
-│   │   ├── page.tsx          # Landing page
+│   │   ├── page.tsx          # Landing page (metadata + SoftwareApplication JSON-LD)
+│   │   ├── about/page.tsx
+│   │   ├── privacy/page.tsx
+│   │   ├── terms/page.tsx
 │   │   └── layout.tsx
 │   ├── (dashboard)/          # Protected dashboard pages
 │   │   ├── dashboard/
@@ -65,7 +69,14 @@ src/
 │   │   ├── analytics/        # User analytics
 │   │   ├── credits/          # Credit balance & history
 │   │   └── webhooks/         # Clerk webhook handler
-│   └── layout.tsx            # Root layout with Clerk & theme providers
+│   ├── icon.tsx              # Generated 32×32 favicon (ImageResponse)
+│   ├── apple-icon.tsx        # Generated 180×180 Apple icon
+│   ├── opengraph-image.tsx   # Generated 1200×630 OG image
+│   ├── twitter-image.tsx     # Twitter card (reuses OG image)
+│   ├── robots.ts             # Crawl rules (allow marketing, disallow dashboard/api)
+│   ├── sitemap.ts            # XML sitemap for 4 public URLs
+│   ├── manifest.ts           # PWA web manifest
+│   └── layout.tsx            # Root layout with Clerk, theme providers & Organization JSON-LD
 ├── components/
 │   ├── dashboard/
 │   │   ├── match/            # Match workflow components
@@ -347,7 +358,15 @@ For issues, questions, or feature requests:
 
 ## Changelog
 
-### v1.0.0 (Current)
+### v1.1.0 (Current)
+- ✅ Full SEO baseline (robots.txt, XML sitemap, canonical URLs)
+- ✅ Generated OG + Twitter card image (1200×630, emerald brand)
+- ✅ Generated favicon + Apple home-screen icon
+- ✅ PWA web manifest
+- ✅ Organization + SoftwareApplication JSON-LD structured data
+- ✅ Per-page metadata with keyword-rich titles on all marketing pages
+
+### v1.0.0
 - ✅ Job Fit Analysis with detailed scoring
 - ✅ Resume Screening for recruiters
 - ✅ Smart Dashboard with analytics

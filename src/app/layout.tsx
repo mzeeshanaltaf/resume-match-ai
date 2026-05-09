@@ -21,7 +21,7 @@ const geist = Geist({
 
 export const metadata: Metadata = {
   title: {
-    default: "ResuMatchAI — Match Your Resume to Any Job",
+    default: "ResuMatchAI — Match Your Resume to Any Job, Instantly",
     template: "%s | ResuMatchAI",
   },
   description:
@@ -30,16 +30,25 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: "https://resumatch.zeeshanai.cloud",
-    title: "ResuMatchAI — Match Your Resume to Any Job",
+    title: "ResuMatchAI — Match Your Resume to Any Job, Instantly",
     description:
       "AI-powered resume analysis and job matching. Get an instant match score and tailored recommendations to land your next role.",
     siteName: "ResuMatchAI",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "ResuMatchAI — AI-powered resume and job matching tool",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "ResuMatchAI — Match Your Resume to Any Job",
+    title: "ResuMatchAI — Match Your Resume to Any Job, Instantly",
     description:
       "AI-powered resume analysis and job matching. Get an instant match score and tailored recommendations.",
+    images: ["/opengraph-image"],
   },
   robots: {
     index: true,

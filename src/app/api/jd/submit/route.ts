@@ -1,9 +1,9 @@
-import { auth } from "@clerk/nextjs/server";
+import { getUserId } from "@/lib/get-user";
 import { scrapeJd } from "@/lib/n8n-main";
 import { N8nError } from "@/lib/n8n";
 
 export async function POST(req: Request) {
-  const { userId } = await auth();
+  const userId = await getUserId();
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }

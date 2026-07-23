@@ -1,8 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
+import { getUserId } from "@/lib/get-user";
 import { getResumes } from "@/lib/n8n-data";
 
 export async function GET() {
-  const { userId } = await auth();
+  const userId = await getUserId();
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }

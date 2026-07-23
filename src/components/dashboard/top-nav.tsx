@@ -1,6 +1,5 @@
 "use client";
 
-import { UserButton } from "@clerk/nextjs";
 import { Menu } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -8,6 +7,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { CreditDisplay } from "./credit-display";
 import { Sidebar } from "./sidebar";
+import { UserMenu } from "./user-menu";
 
 const breadcrumbMap: Record<string, string> = {
   "/dashboard": "Overview",
@@ -47,7 +47,7 @@ export function TopNav() {
       <div className="flex items-center gap-3">
         <CreditDisplay />
         <ThemeToggle />
-        <UserButton />
+        <UserMenu />
       </div>
     </header>
   );

@@ -1,11 +1,11 @@
-import { auth } from "@clerk/nextjs/server";
+import { getUserId } from "@/lib/get-user";
 import { deleteJd } from "@/lib/n8n-delete";
 
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { userId } = await auth();
+  const userId = await getUserId();
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -1,8 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
+import { getUserId } from "@/lib/get-user";
 import { runResumeMatch } from "@/lib/n8n-main";
 
 export async function POST(req: Request) {
-  const { userId } = await auth();
+  const userId = await getUserId();
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }

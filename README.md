@@ -35,12 +35,16 @@ An AI-powered SaaS application that matches resumes against job descriptions, pr
 
 ## Tech Stack
 
-- **Frontend:** Next.js 16 (App Router), TypeScript, React 18, Tailwind CSS v4
+- **Frontend:** Next.js 16 (App Router), TypeScript, React 19, Tailwind CSS v4
 - **UI Components:** shadcn/ui (Slate theme)
-- **Auth:** Clerk
+- **Auth:** [Better Auth](https://better-auth.com) — email/password + Google OAuth, backed by Postgres
+- **Database:** Postgres — Better Auth tables (`user`, `session`, `account`, `verification`) in a `resume_match` schema
 - **Backend:** n8n webhooks (AI/data processing)
+- **Analytics:** self-hosted [Umami](https://umami.is)
+- **Rate limiting:** Upstash Redis (contact form)
 - **Styling:** Tailwind CSS v4 with dark mode support
 - **State Management:** React Context API
+- **Hosting:** Coolify on a Hostinger VPS (auto-deploy via GitHub Actions)
 - **SEO:** robots.txt, XML sitemap, OG/Twitter image generation, JSON-LD structured data, PWA manifest
 
 ## Project Structure
@@ -50,6 +54,9 @@ src/
 ├── app/
 │   ├── (marketing)/          # Public marketing pages
 │   │   ├── page.tsx          # Landing page (metadata + SoftwareApplication JSON-LD)
+│   │   ├── sign-in/page.tsx  # Better Auth sign-in (email/password + Google)
+│   │   ├── sign-up/page.tsx  # Better Auth sign-up
+│   │   ├── contact/page.tsx  # Contact form (honeypot + Upstash rate limit)
 │   │   ├── about/page.tsx
 │   │   ├── privacy/page.tsx
 │   │   ├── terms/page.tsx
@@ -63,12 +70,13 @@ src/
 │   │   │   └── settings/     # User settings & credits
 │   │   └── layout.tsx        # Dashboard shell with DashboardDataProvider
 │   ├── api/
+│   │   ├── auth/[...all]/    # Better Auth handler (+ /api/auth/ok health check)
+│   │   ├── contact/          # Contact form → n8n (honeypot + rate limit)
 │   │   ├── resume/           # Resume upload, list, delete
 │   │   ├── jd/               # Job description submit
 │   │   ├── match/            # Match analysis & history
 │   │   ├── analytics/        # User analytics
-│   │   ├── credits/          # Credit balance & history
-│   │   └── webhooks/         # Clerk webhook handler
+│   │   └── credits/          # Credit balance & history
 │   ├── icon.tsx              # Generated 32×32 favicon (ImageResponse)
 │   ├── apple-icon.tsx        # Generated 180×180 Apple icon
 │   ├── opengraph-image.tsx   # Generated 1200×630 OG image
@@ -76,7 +84,7 @@ src/
 │   ├── robots.ts             # Crawl rules (allow marketing, disallow dashboard/api)
 │   ├── sitemap.ts            # XML sitemap for 4 public URLs
 │   ├── manifest.ts           # PWA web manifest
-│   └── layout.tsx            # Root layout with Clerk, theme providers & Organization JSON-LD
+│   └── layout.tsx            # Root layout: theme provider, Umami script & Organization JSON-LD
 ├── components/
 │   ├── dashboard/
 │   │   ├── match/            # Match workflow components
@@ -92,16 +100,19 @@ src/
 ├── contexts/
 │   └── dashboard-data.tsx    # DashboardDataProvider context (caches analytics, matches, credits)
 ├── lib/
+│   ├── auth.ts               # Better Auth server config (pg Pool, providers, signup-credits hook)
+│   ├── auth-client.ts        # Better Auth React client (signIn/signUp/signOut/useSession)
+│   ├── get-user.ts           # getUserId() — server helper used by every protected API route
+│   ├── rate-limit.ts         # Upstash sliding-window limiter (fails open)
 │   ├── n8n.ts                # n8n webhook client
 │   ├── n8n-main.ts           # Resume processing, JD scraping, matching
 │   ├── n8n-analytics.ts      # User analytics
-│   ├── n8n-credits.ts        # Credit management
+│   ├── n8n-credits.ts        # Credit management (signupCredits granted by DB hook)
 │   ├── n8n-data.ts           # Data retrieval (resumes, JDs, matches)
-│   ├── n8n-delete.ts         # Data deletion
-│   └── refresh-credits.ts    # Legacy credit refresh (kept for reference)
+│   └── n8n-delete.ts         # Data deletion
 ├── types/
 │   └── n8n.ts                # TypeScript types for n8n responses
-└── middleware.ts             # Clerk auth middleware
+└── proxy.ts                  # Better Auth session-cookie gate for /dashboard/* (Next.js 16 middleware)
 ```
 
 ## Architecture
@@ -131,10 +142,11 @@ Dashboard automatically refreshes (Overview, History, Credits)
 
 ### Prerequisites
 
-- Node.js 18+ (LTS recommended)
-- npm or yarn
-- Clerk account (free tier)
+- Node.js 20+ (22 recommended)
+- npm
+- A Postgres database (Better Auth tables live in a `resume_match` schema)
 - n8n instance with configured webhooks
+- (Optional) Google OAuth 2.0 client, Upstash Redis, Umami instance
 
 ### Installation
 
@@ -154,12 +166,16 @@ Dashboard automatically refreshes (Overview, History, Credits)
    cp .env.example .env.local
    ```
 
-   Add your Clerk and n8n credentials:
+   Fill in the values (see `.env.example` for the full list):
    ```env
-   # Clerk (get from https://dashboard.clerk.com)
-   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-   CLERK_SECRET_KEY=sk_test_...
-   CLERK_WEBHOOK_SECRET=whsec_...
+   # Better Auth
+   BETTER_AUTH_SECRET=            # openssl rand -base64 32
+   BETTER_AUTH_URL=http://localhost:3000
+   DATABASE_URL=postgres://user:pass@host:5432/db
+
+   # Google OAuth (optional — button only shows when both are set)
+   GOOGLE_CLIENT_ID=
+   GOOGLE_CLIENT_SECRET=
 
    # n8n (webhook base URL + webhook IDs)
    N8N_WEBHOOK_BASE_URL=https://your-n8n-instance.com/webhook
@@ -169,9 +185,22 @@ Dashboard automatically refreshes (Overview, History, Credits)
    N8N_CREDITS_WEBHOOK_ID=...
    N8N_DATA_WEBHOOK_ID=...
    N8N_DELETE_WEBHOOK_ID=...
+
+   # Umami (build-time) + Upstash (contact rate limit)
+   NEXT_PUBLIC_UMAMI_SCRIPT_URL=
+   NEXT_PUBLIC_UMAMI_WEBSITE_ID=
+   UPSTASH_REDIS_REST_URL=
+   UPSTASH_REDIS_REST_TOKEN=
    ```
 
-4. **Start development server**
+4. **Create the auth tables** (once per database)
+   ```bash
+   # ensure the schema exists, then generate Better Auth tables inside it
+   psql "$DATABASE_URL" -c "CREATE SCHEMA IF NOT EXISTS resume_match;"
+   npx @better-auth/cli@latest migrate
+   ```
+
+5. **Start development server**
    ```bash
    npm run dev
    ```
@@ -186,6 +215,11 @@ npm start
 ```
 
 ## API Endpoints
+
+### Authentication & Contact
+- `ALL /api/auth/[...all]` — Better Auth (sign-up/in/out, session, Google OAuth callback)
+- `GET /api/auth/ok` — health check → `{ status: "ok" }`
+- `POST /api/contact` — contact form → n8n (honeypot drop + per-IP rate limit)
 
 ### Resume Management
 - `POST /api/resume/upload` — Upload and process a resume
@@ -249,7 +283,7 @@ All webhooks accept `POST` requests with:
 - **Bulk delete:** Remove analyses from history
 
 ### Settings Page
-- **Profile tab:** Edit account information (via Clerk)
+- **Profile tab:** Update name, change password, sign out (via Better Auth)
 - **Credits tab:** View balance and transaction history
 - **Account tab:** Danger zone (future features)
 
@@ -287,16 +321,24 @@ npm run dev
 
 ## Deployment
 
-### Vercel (Recommended)
+The app runs on **Coolify** (self-hosted on a Hostinger VPS) and auto-deploys on
+push to `main`:
 
 ```bash
 git push origin main
-# Vercel auto-deploys on push to main
+# .github/workflows/deploy.yml triggers the Coolify deploy API (with retries)
 ```
 
-Add environment variables in Vercel dashboard → Settings → Environment Variables
+- **Build:** nixpacks, Node 22, port 3000. `NIXPACKS_INSTALL_CMD=npm install`
+  avoids cross-OS lockfile drift.
+- **Env vars:** set in Coolify → application → Environment Variables. Mark every
+  `NEXT_PUBLIC_*` and `BETTER_AUTH_URL` as **build-time**; secrets are runtime.
+- **DB host:** inside the container use the docker0 gateway IP (e.g. `10.0.0.1`),
+  not the public IP, in `DATABASE_URL`.
+- **Auto-deploy secrets** (repo → Settings → Secrets → Actions):
+  `COOLIFY_APP_UUID`, `COOLIFY_API_TOKEN` (deploy-scoped).
 
-### Self-hosted
+### Self-hosted (generic)
 
 ```bash
 npm run build
@@ -358,7 +400,14 @@ For issues, questions, or feature requests:
 
 ## Changelog
 
-### v1.1.0 (Current)
+### v1.2.0 (Current)
+- ✅ Migrated auth from Clerk to **Better Auth** (email/password + Google), backed by Postgres
+- ✅ Signup credits now granted by a Better Auth `user.create` DB hook (Clerk webhook removed)
+- ✅ New `/contact` page (progressive-enhancement form, honeypot + Upstash rate limiting)
+- ✅ Swapped Vercel Analytics for self-hosted **Umami**
+- ✅ Migrated hosting from Vercel to **Coolify** (Hostinger VPS) with GitHub Actions auto-deploy
+
+### v1.1.0
 - ✅ Full SEO baseline (robots.txt, XML sitemap, canonical URLs)
 - ✅ Generated OG + Twitter card image (1200×630, emerald brand)
 - ✅ Generated favicon + Apple home-screen icon

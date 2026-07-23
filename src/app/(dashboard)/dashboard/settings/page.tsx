@@ -1,8 +1,8 @@
 "use client";
 
-import { UserProfile } from "@clerk/nextjs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CreditsSection } from "@/components/dashboard/settings/credits-section";
+import { ProfileSection } from "@/components/dashboard/settings/profile-section";
 import { AlertTriangle } from "lucide-react";
 
 export default function SettingsPage() {
@@ -22,19 +22,9 @@ export default function SettingsPage() {
           <TabsTrigger value="account">Account</TabsTrigger>
         </TabsList>
 
-        {/* Profile — Clerk managed */}
+        {/* Profile */}
         <TabsContent value="profile" className="mt-6">
-          <UserProfile
-            routing="hash"
-            appearance={{
-              elements: {
-                rootBox: "w-full",
-                card: "shadow-none border border-border rounded-lg w-full",
-                navbar: "hidden",
-                pageScrollBox: "p-0",
-              },
-            }}
-          />
+          <ProfileSection />
         </TabsContent>
 
         {/* Credits */}

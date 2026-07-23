@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/marketing/navbar";
 import { Footer } from "@/components/marketing/footer";
-import { ContactDialog } from "@/components/marketing/contact-dialog";
+import { CtaButton } from "@/components/marketing/cta-button";
 import {
-  ArrowRight,
   Check,
   FileText,
   Target,
@@ -223,27 +221,12 @@ export default function LandingPage() {
                 </p>
 
                 <div className="au-4 mt-8 flex flex-wrap items-center gap-3">
-                  <SignedOut>
-                    <SignInButton mode="modal">
-                      <Button
-                        size="lg"
-                        className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-slate-950"
-                      >
-                        Start for free <ArrowRight className="h-4 w-4" />
-                      </Button>
-                    </SignInButton>
-                  </SignedOut>
-                  <SignedIn>
-                    <Button
-                      asChild
-                      size="lg"
-                      className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
-                    >
-                      <Link href="/dashboard">
-                        Go to Dashboard <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </SignedIn>
+                  <CtaButton
+                    signedOutLabel="Start for free"
+                    size="lg"
+                    withArrow
+                    className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-slate-950"
+                  />
                   <Button variant="outline" size="lg" asChild>
                     <Link href="#how-it-works">See how it works</Link>
                   </Button>
@@ -497,29 +480,20 @@ export default function LandingPage() {
 
                     <div className="mt-8">
                       {plan.name === "Enterprise" ? (
-                        <ContactDialog
-                          triggerLabel="Contact sales"
-                          triggerClassName="inline-flex h-9 w-full items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                        />
+                        <Button asChild className="w-full" variant="outline">
+                          <Link href="/contact">Contact sales</Link>
+                        </Button>
                       ) : plan.name === "Pro" ? (
                         <Button className="w-full" variant="outline" disabled>
                           Coming Soon
                         </Button>
                       ) : (
-                        <>
-                          <SignedOut>
-                            <SignInButton mode="modal">
-                              <Button className="w-full" variant="outline">
-                                {plan.cta}
-                              </Button>
-                            </SignInButton>
-                          </SignedOut>
-                          <SignedIn>
-                            <Button asChild className="w-full" variant="outline">
-                              <Link href="/dashboard">{plan.cta}</Link>
-                            </Button>
-                          </SignedIn>
-                        </>
+                        <CtaButton
+                          signedOutLabel={plan.cta}
+                          signedInLabel={plan.cta}
+                          variant="outline"
+                          className="w-full"
+                        />
                       )}
                     </div>
                   </div>
@@ -564,27 +538,12 @@ export default function LandingPage() {
                 </p>
 
                 <div className="mt-8 flex flex-wrap justify-center gap-3">
-                  <SignedOut>
-                    <SignInButton mode="modal">
-                      <Button
-                        size="lg"
-                        className="gap-2 bg-emerald-500 font-semibold text-slate-950 hover:bg-emerald-400"
-                      >
-                        Get started for free <ArrowRight className="h-4 w-4" />
-                      </Button>
-                    </SignInButton>
-                  </SignedOut>
-                  <SignedIn>
-                    <Button
-                      asChild
-                      size="lg"
-                      className="gap-2 bg-emerald-500 font-semibold text-slate-950 hover:bg-emerald-400"
-                    >
-                      <Link href="/dashboard">
-                        Go to Dashboard <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </SignedIn>
+                  <CtaButton
+                    signedOutLabel="Get started for free"
+                    size="lg"
+                    withArrow
+                    className="gap-2 bg-emerald-500 font-semibold text-slate-950 hover:bg-emerald-400"
+                  />
                   <Button
                     variant="outline"
                     size="lg"

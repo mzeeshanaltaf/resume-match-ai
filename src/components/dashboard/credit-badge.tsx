@@ -1,9 +1,9 @@
-import { auth } from "@clerk/nextjs/server";
+import { getUserId } from "@/lib/get-user";
 import { getUserData } from "@/lib/n8n-data";
 import { Zap } from "lucide-react";
 
 export async function CreditBadge() {
-  const { userId } = await auth();
+  const userId = await getUserId();
   if (!userId) return null;
 
   let balance = 0;

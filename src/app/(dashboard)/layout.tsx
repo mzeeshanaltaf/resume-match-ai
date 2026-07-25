@@ -1,6 +1,5 @@
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { TopNav } from "@/components/dashboard/top-nav";
-import { Toaster } from "@/components/ui/sonner";
 import { DashboardDataProvider } from "@/contexts/dashboard-data";
 
 export default function DashboardLayout({
@@ -23,8 +22,6 @@ export default function DashboardLayout({
             {children}
           </main>
         </div>
-
-        <Toaster position="bottom-right" richColors />
       </div>
     </DashboardDataProvider>
   );

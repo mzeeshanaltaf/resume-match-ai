@@ -8,7 +8,7 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 - **Auth: Better Auth** (`better-auth` + `pg`) — email/password + Google OAuth
 - **Postgres** — holds only Better Auth tables (`user`/`session`/`account`/`verification`) in the **`resume_match`** schema
 - **n8n webhooks** = the sole AI/data backend (no ORM, no app tables in code)
-- **Umami** analytics, **Upstash Redis** (contact rate limit)
+- **Resend** (auth OTP emails), **Umami** analytics, **Upstash Redis** (contact rate limit)
 - Hosted on **Coolify** (Hostinger VPS), auto-deploy via **GitHub Actions** on push to `main`
 - Package manager: **npm**. Repo: `mzeeshanaltaf/resume-match-ai`.
 
@@ -18,8 +18,17 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 - `src/lib/get-user.ts` — **`getUserId()`**: the single server-side auth check used by every protected API route (replaced Clerk's `auth()`)
 - `src/app/api/auth/[...all]/route.ts` — `toNextJsHandler(auth)`; health check at `/api/auth/ok`
 - `src/proxy.ts` — Better Auth `getSessionCookie` gate for `/dashboard/*` → `/sign-in` (Next.js 16 uses `proxy.ts`, not `middleware.ts`)
-- Custom `/sign-in` + `/sign-up` pages via `src/components/marketing/auth-form.tsx` (Google button only renders when `GOOGLE_CLIENT_ID`/`SECRET` set)
-- **New-user credits come from the DB hook**, not a webhook. Email verification / password reset are OFF.
+- Custom `/sign-in` + `/sign-up` pages via `src/components/marketing/auth-form.tsx` (Google button only renders when `GOOGLE_CLIENT_ID`/`SECRET` set); all auth screens share `auth-shell.tsx`
+- **New-user credits come from the DB hook**, not a webhook.
+
+## Email OTP (verification + password reset, added 2026-07-25)
+- `emailOTP` plugin in `auth.ts`: `overrideDefaultEmailVerification`, `disableSignUp: true` (closes passwordless `/sign-in/email-otp`), 6 digits, `expiresIn: 600`, `allowedAttempts: 3`, `storeOTP: "hashed"`, `rateLimit {60s, 3}`. **Verification is ENFORCED** (`requireEmailVerification: true`) + `sendOnSignIn` + `autoSignInAfterVerification`.
+- Sender: `src/lib/email.ts` (Resend, HTML+text template). `src/lib/otp-sender.ts` holds the client-safe `OTP_SENDER_EMAIL` used in the "check spam" copy — keep it in sync with `RESEND_FROM_EMAIL`.
+- Screens: `/verify-email` (needs `<Suspense>`, reads `?email=&redirect=`) and `/forgot-password` (one route, request→reset steps). Shared bits in `src/components/marketing/otp-field.tsx` (`OtpField`, `EmailDeliveryNote`, `useCooldown`).
+- Sign-up returns **no session** → redirect to `/verify-email`. Sign-in error `EMAIL_NOT_VERIFIED` → same redirect (this is how pre-existing unverified users get through; no backfill was run). `resetPassword` creates **no session** → back to `/sign-in`. Google users arrive pre-verified.
+- **No DB migration** — codes live in the existing `verification` table.
+- `RESEND_FROM_EMAIL` must be **unquoted** in Coolify (dotenv strips quotes, Docker doesn't → Resend 422 on `from`). `<Toaster>` now lives in the **root** layout (was dashboard-only, which silently swallowed every marketing-page toast).
+- Preflight: `node ~/.claude/skills/better-auth-email-otp/scripts/preflight.mjs --app-dir src/app`.
 
 ## Layout & routing
 - Route groups: `(marketing)` public, `(dashboard)` protected
@@ -44,6 +53,7 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 
 ## Env vars (`.env.local`; template in `.env.example`, kept via `!.env.example` gitignore exception)
 `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `DATABASE_URL`, `GOOGLE_CLIENT_ID/SECRET`,
+`RESEND_API_KEY`, `RESEND_FROM_EMAIL` (unquoted, runtime),
 `N8N_WEBHOOK_BASE_URL`, `N8N_API_KEY`, `N8N_*_WEBHOOK_ID`,
 `NEXT_PUBLIC_UMAMI_SCRIPT_URL`, `NEXT_PUBLIC_UMAMI_WEBSITE_ID`,
 `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`

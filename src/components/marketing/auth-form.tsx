@@ -4,9 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn, signUp } from "@/lib/auth-client";
+import { AuthShell } from "@/components/marketing/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileText, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface AuthFormProps {
   mode: "sign-in" | "sign-up";
@@ -24,18 +25,37 @@ export function AuthForm({ mode, googleEnabled }: AuthFormProps) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function verifyUrl() {
+    return `/verify-email?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent("/dashboard")}`;
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     const { error } = isSignUp
-      ? await signUp.email({ name, email, password, callbackURL: "/dashboard" })
+      ? await signUp.email({ name, email, password })
       : await signIn.email({ email, password, callbackURL: "/dashboard" });
 
     if (error) {
+      // The account exists but isn't verified. The server already sent a fresh
+      // code (emailVerification.sendOnSignIn), so hand off to the verify screen
+      // instead of showing an error the user can't act on. This is also how
+      // pre-existing accounts created before verification was enforced get
+      // through — they verify on their next sign-in.
+      if (error.code === "EMAIL_NOT_VERIFIED") {
+        router.push(verifyUrl());
+        return;
+      }
       setError(error.message ?? "Something went wrong. Please try again.");
       setLoading(false);
+      return;
+    }
+
+    if (isSignUp) {
+      // requireEmailVerification means sign-up issues no session.
+      router.push(verifyUrl());
       return;
     }
 
@@ -57,137 +77,133 @@ export function AuthForm({ mode, googleEnabled }: AuthFormProps) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        {/* Logo */}
-        <Link href="/" className="mb-8 flex items-center justify-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/10">
-            <FileText className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight">ResuMatchAI</span>
-        </Link>
-
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
-          <div className="mb-6 text-center">
-            <h1
-              className="text-2xl tracking-tight"
-              style={{ fontFamily: "var(--font-display), Georgia, serif", fontStyle: "italic" }}
+    <AuthShell
+      title={isSignUp ? "Create your account" : "Welcome back"}
+      subtitle={
+        isSignUp
+          ? "Start matching your resume in seconds."
+          : "Sign in to continue to your dashboard."
+      }
+      footer={
+        isSignUp ? (
+          <>
+            Already have an account?{" "}
+            <Link
+              href="/sign-in"
+              className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
             >
-              {isSignUp ? "Create your account" : "Welcome back"}
-            </h1>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              {isSignUp
-                ? "Start matching your resume in seconds."
-                : "Sign in to continue to your dashboard."}
-            </p>
+              Sign in
+            </Link>
+          </>
+        ) : (
+          <>
+            Don&apos;t have an account?{" "}
+            <Link
+              href="/sign-up"
+              className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+            >
+              Get started
+            </Link>
+          </>
+        )
+      }
+    >
+      {googleEnabled && (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full gap-2"
+            onClick={handleGoogle}
+            disabled={googleLoading || loading}
+          >
+            {googleLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <GoogleIcon />
+            )}
+            Continue with Google
+          </Button>
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">or</span>
+            <div className="h-px flex-1 bg-border" />
           </div>
+        </>
+      )}
 
-          {googleEnabled && (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full gap-2"
-                onClick={handleGoogle}
-                disabled={googleLoading || loading}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {isSignUp && (
+          <div className="space-y-1.5">
+            <label htmlFor="name" className="text-sm font-medium">
+              Name
+            </label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Jane Smith"
+              autoComplete="name"
+              required
+            />
+          </div>
+        )}
+        <div className="space-y-1.5">
+          <label htmlFor="email" className="text-sm font-medium">
+            Email
+          </label>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="jane@example.com"
+            autoComplete="email"
+            required
+          />
+        </div>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label htmlFor="password" className="text-sm font-medium">
+              Password
+            </label>
+            {!isSignUp && (
+              <Link
+                href="/forgot-password"
+                className="text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-400"
               >
-                {googleLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <GoogleIcon />
-                )}
-                Continue with Google
-              </Button>
-              <div className="my-5 flex items-center gap-3">
-                <div className="h-px flex-1 bg-border" />
-                <span className="text-xs text-muted-foreground">or</span>
-                <div className="h-px flex-1 bg-border" />
-              </div>
-            </>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {isSignUp && (
-              <div className="space-y-1.5">
-                <label htmlFor="name" className="text-sm font-medium">
-                  Name
-                </label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Jane Smith"
-                  autoComplete="name"
-                  required
-                />
-              </div>
+                Forgot password?
+              </Link>
             )}
-            <div className="space-y-1.5">
-              <label htmlFor="email" className="text-sm font-medium">
-                Email
-              </label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="jane@example.com"
-                autoComplete="email"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="text-sm font-medium">
-                Password
-              </label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                autoComplete={isSignUp ? "new-password" : "current-password"}
-                minLength={8}
-                required
-              />
-            </div>
-
-            {error && (
-              <p className="text-sm text-destructive" role="alert">
-                {error}
-              </p>
-            )}
-
-            <Button
-              type="submit"
-              disabled={loading || googleLoading}
-              className="w-full gap-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
-            >
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isSignUp ? "Create account" : "Sign in"}
-            </Button>
-          </form>
+          </div>
+          <Input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoComplete={isSignUp ? "new-password" : "current-password"}
+            minLength={8}
+            required
+          />
         </div>
 
-        <p className="mt-6 text-center text-sm text-muted-foreground">
-          {isSignUp ? (
-            <>
-              Already have an account?{" "}
-              <Link href="/sign-in" className="font-medium text-emerald-600 hover:underline dark:text-emerald-400">
-                Sign in
-              </Link>
-            </>
-          ) : (
-            <>
-              Don&apos;t have an account?{" "}
-              <Link href="/sign-up" className="font-medium text-emerald-600 hover:underline dark:text-emerald-400">
-                Get started
-              </Link>
-            </>
-          )}
-        </p>
-      </div>
-    </div>
+        {error && (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
+
+        <Button
+          type="submit"
+          disabled={loading || googleLoading}
+          className="w-full gap-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
+        >
+          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {isSignUp ? "Create account" : "Sign in"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }
 

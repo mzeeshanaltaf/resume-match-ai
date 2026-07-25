@@ -37,9 +37,10 @@ An AI-powered SaaS application that matches resumes against job descriptions, pr
 
 - **Frontend:** Next.js 16 (App Router), TypeScript, React 19, Tailwind CSS v4
 - **UI Components:** shadcn/ui (Slate theme)
-- **Auth:** [Better Auth](https://better-auth.com) — email/password + Google OAuth, backed by Postgres
+- **Auth:** [Better Auth](https://better-auth.com) — email/password + Google OAuth, with enforced email-OTP verification and password reset, backed by Postgres
 - **Database:** Postgres — Better Auth tables (`user`, `session`, `account`, `verification`) in a `resume_match` schema
 - **Backend:** n8n webhooks (AI/data processing)
+- **Transactional email:** [Resend](https://resend.com) (verification & password-reset codes)
 - **Analytics:** self-hosted [Umami](https://umami.is)
 - **Rate limiting:** Upstash Redis (contact form)
 - **Styling:** Tailwind CSS v4 with dark mode support
@@ -56,6 +57,8 @@ src/
 │   │   ├── page.tsx          # Landing page (metadata + SoftwareApplication JSON-LD)
 │   │   ├── sign-in/page.tsx  # Better Auth sign-in (email/password + Google)
 │   │   ├── sign-up/page.tsx  # Better Auth sign-up
+│   │   ├── verify-email/     # 6-digit email verification (Suspense-wrapped)
+│   │   ├── forgot-password/  # Password reset (request code → set new password)
 │   │   ├── contact/page.tsx  # Contact form (honeypot + Upstash rate limit)
 │   │   ├── about/page.tsx
 │   │   ├── privacy/page.tsx
@@ -84,7 +87,7 @@ src/
 │   ├── robots.ts             # Crawl rules (allow marketing, disallow dashboard/api)
 │   ├── sitemap.ts            # XML sitemap for 4 public URLs
 │   ├── manifest.ts           # PWA web manifest
-│   └── layout.tsx            # Root layout: theme provider, Umami script & Organization JSON-LD
+│   └── layout.tsx            # Root layout: theme provider, Toaster, Umami script & Organization JSON-LD
 ├── components/
 │   ├── dashboard/
 │   │   ├── match/            # Match workflow components
@@ -94,14 +97,21 @@ src/
 │   │   ├── sidebar.tsx
 │   │   ├── top-nav.tsx
 │   │   └── credit-display.tsx
-│   ├── marketing/            # Landing page components
+│   ├── marketing/            # Landing page + auth screens
+│   │   ├── auth-shell.tsx    # Shared frame for all four auth screens
+│   │   ├── auth-form.tsx     # Sign-in / sign-up form
+│   │   ├── verify-email-form.tsx
+│   │   ├── forgot-password-form.tsx
+│   │   └── otp-field.tsx     # OtpField, EmailDeliveryNote, useCooldown
 │   ├── ui/                   # shadcn/ui primitives
 │   └── theme-provider.tsx    # next-themes wrapper
 ├── contexts/
 │   └── dashboard-data.tsx    # DashboardDataProvider context (caches analytics, matches, credits)
 ├── lib/
-│   ├── auth.ts               # Better Auth server config (pg Pool, providers, signup-credits hook)
-│   ├── auth-client.ts        # Better Auth React client (signIn/signUp/signOut/useSession)
+│   ├── auth.ts               # Better Auth server config (pg Pool, providers, emailOTP, signup-credits hook)
+│   ├── auth-client.ts        # Better Auth React client (signIn/signUp/signOut/useSession/emailOtp)
+│   ├── email.ts              # Resend sender + OTP email template (server-only)
+│   ├── otp-sender.ts         # OTP_SENDER_EMAIL — client-safe sender address constant
 │   ├── get-user.ts           # getUserId() — server helper used by every protected API route
 │   ├── rate-limit.ts         # Upstash sliding-window limiter (fails open)
 │   ├── n8n.ts                # n8n webhook client
@@ -131,6 +141,25 @@ UI updates via DashboardDataProvider context
 Dashboard automatically refreshes (Overview, History, Credits)
 ```
 
+### Authentication Flow
+
+Email verification is **enforced** — an account gets no session until its 6-digit code is entered.
+
+```
+Sign up → account created, NO session → /verify-email → code entered → session issued → /dashboard
+Sign in (unverified) → EMAIL_NOT_VERIFIED + fresh code auto-sent → /verify-email → …
+Forgot password → /forgot-password → code → new password → NO session → /sign-in
+Google OAuth → arrives pre-verified, no code prompt
+```
+
+- Codes are 6 digits, expire after 10 minutes, allow 3 attempts, are **hashed at rest**, and are
+  rate-limited to 3 sends per 60s (mirrored by a 60s cooldown on the "Resend code" button).
+- Codes live in Better Auth's existing `verification` table — **no migration needed**.
+- The passwordless `/sign-in/email-otp` endpoint is disabled (`disableSignUp: true`) so unknown
+  emails can't create nameless, passwordless accounts.
+- Better Auth **swallows and logs** send failures: a broken `RESEND_API_KEY` still returns
+  "code sent" to the UI. Verify delivery in the Resend dashboard, not the browser.
+
 ### DashboardDataProvider Context
 
 - **Fetches once** on dashboard mount: analytics, matches, credit balance & history
@@ -146,6 +175,8 @@ Dashboard automatically refreshes (Overview, History, Credits)
 - npm
 - A Postgres database (Better Auth tables live in a `resume_match` schema)
 - n8n instance with configured webhooks
+- A [Resend](https://resend.com) account with a **verified sending domain** (auth codes won't
+  deliver without one — the `onboarding@resend.dev` sandbox only mails your own account address)
 - (Optional) Google OAuth 2.0 client, Upstash Redis, Umami instance
 
 ### Installation
@@ -176,6 +207,13 @@ Dashboard automatically refreshes (Overview, History, Credits)
    # Google OAuth (optional — button only shows when both are set)
    GOOGLE_CLIENT_ID=
    GOOGLE_CLIENT_SECRET=
+
+   # Resend — auth verification / password-reset emails
+   RESEND_API_KEY=re_...
+   # Leave UNQUOTED: dotenv strips quotes locally but Docker/Coolify don't,
+   # and Resend rejects a `from` containing literal quote characters (422).
+   # Keep the address in sync with OTP_SENDER_EMAIL in src/lib/otp-sender.ts.
+   RESEND_FROM_EMAIL=ResuMatchAI <noreply@verification.your-domain.com>
 
    # n8n (webhook base URL + webhook IDs)
    N8N_WEBHOOK_BASE_URL=https://your-n8n-instance.com/webhook
@@ -217,7 +255,9 @@ npm start
 ## API Endpoints
 
 ### Authentication & Contact
-- `ALL /api/auth/[...all]` — Better Auth (sign-up/in/out, session, Google OAuth callback)
+- `ALL /api/auth/[...all]` — Better Auth (sign-up/in/out, session, Google OAuth callback, and the
+  `email-otp/*` routes: `send-verification-otp`, `verify-email`, `request-password-reset`,
+  `reset-password`)
 - `GET /api/auth/ok` — health check → `{ status: "ok" }`
 - `POST /api/contact` — contact form → n8n (honeypot drop + per-IP rate limit)
 
@@ -318,6 +358,13 @@ npm run dev
 3. **History:** Navigate to History, search/filter, view details, delete entries
 4. **Credits:** Check Settings → Credits, confirm balance updates after workflows
 5. **Dark mode:** Click theme toggle in navbar, verify both themes work
+6. **Email verification:** Sign up with a real address → code arrives → entering it signs you in.
+   Check 3 wrong codes give `TOO_MANY_ATTEMPTS`, and that "Resend" delivers a *different* code.
+7. **Password reset:** `/forgot-password` → code → new password → redirected to sign-in, old
+   password rejected.
+
+> Note: `requestPasswordReset` returns success for addresses with no account (anti-enumeration),
+> so a made-up address that receives nothing is correct behaviour, not a bug.
 
 ## Deployment
 
@@ -332,7 +379,11 @@ git push origin main
 - **Build:** nixpacks, Node 22, port 3000. `NIXPACKS_INSTALL_CMD=npm install`
   avoids cross-OS lockfile drift.
 - **Env vars:** set in Coolify → application → Environment Variables. Mark every
-  `NEXT_PUBLIC_*` and `BETTER_AUTH_URL` as **build-time**; secrets are runtime.
+  `NEXT_PUBLIC_*` and `BETTER_AUTH_URL` as **build-time**; secrets (including
+  `RESEND_API_KEY` / `RESEND_FROM_EMAIL`) are runtime.
+- **Paste `RESEND_FROM_EMAIL` without quotes.** dotenv strips quotes locally but
+  Coolify passes the raw string through, so a quoted value fails in production
+  only — with a Resend `422 validation_error` on the `from` field.
 - **DB host:** inside the container use the docker0 gateway IP (e.g. `10.0.0.1`),
   not the public IP, in `DATABASE_URL`.
 - **Auto-deploy secrets** (repo → Settings → Secrets → Actions):
@@ -400,7 +451,15 @@ For issues, questions, or feature requests:
 
 ## Changelog
 
-### v1.2.0 (Current)
+### v1.3.0 (Current)
+- ✅ **Enforced email verification** via Better Auth's `emailOTP` plugin — 6-digit codes, hashed at
+  rest, 10-minute expiry, 3 attempts, 3 sends/60s
+- ✅ **Forgot-password flow** at `/forgot-password` (request code → set new password)
+- ✅ Codes delivered by **Resend** with an HTML + plain-text email template
+- ✅ New `/verify-email` screen; all four auth screens now share `auth-shell.tsx`
+- ✅ Moved `<Toaster />` to the root layout (toasts on marketing pages previously rendered nothing)
+
+### v1.2.0
 - ✅ Migrated auth from Clerk to **Better Auth** (email/password + Google), backed by Postgres
 - ✅ Signup credits now granted by a Better Auth `user.create` DB hook (Clerk webhook removed)
 - ✅ New `/contact` page (progressive-enhancement form, honeypot + Upstash rate limiting)

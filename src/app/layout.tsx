@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const umamiScriptUrl = process.env.NEXT_PUBLIC_UMAMI_SCRIPT_URL;
@@ -77,6 +78,10 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          {/* Mounted at the root: toasts raised on marketing-side pages
+              (sign-in, verify-email, forgot-password) render nothing at all
+              if the Toaster only lives in the dashboard route group. */}
+          <Toaster position="bottom-right" richColors />
         </ThemeProvider>
         {umamiScriptUrl && umamiWebsiteId && (
           <Script

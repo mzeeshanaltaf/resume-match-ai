@@ -26,6 +26,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # POST is required — Coolify's /deploy route rejects GET with a 405 stub.
+      # 90s per attempt: the VPS can be CPU-saturated under load from other apps,
+      # so the deploy call needs headroom, not just retries.
       - name: Trigger Coolify deploy (with retries)
         env:
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
@@ -33,7 +36,7 @@ jobs:
         run: |
           set -u
           for i in 1 2 3 4 5; do
-            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 \
+            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 90 -X POST \
               "${COOLIFY_URL}/api/v1/deploy?uuid=${COOLIFY_APP_UUID}&force=false" \
               -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" || echo "000")
             echo "Attempt $i -> HTTP $code"
@@ -42,7 +45,7 @@ jobs:
               exit 0
             fi
             if [ "$i" -lt 5 ]; then
-              backoff=$((i * 15)) # 15s, 30s, 45s, 60s
+              backoff=$((i * 20)) # 20s, 40s, 60s, 80s
               echo "Retrying in ${backoff}s..."
               sleep "$backoff"
             fi

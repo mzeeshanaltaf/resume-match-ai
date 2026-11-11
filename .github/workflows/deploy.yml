@@ -17,6 +17,9 @@ env:
 on:
   push:
     branches: [main]
+    paths-ignore: # docs-only pushes (handoff notes etc.) must not rebuild production
+      - "docs/**"
+      - "**/*.md"
   workflow_dispatch: {} # allow manual re-trigger from the Actions tab
 
 concurrency:

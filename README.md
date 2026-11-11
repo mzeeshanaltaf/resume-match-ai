@@ -355,26 +355,32 @@ npm run dev
 
 ## Deployment
 
-The app runs on **Coolify** (self-hosted on a Hostinger VPS) and auto-deploys on
-push to `main`:
+Two apps and a storage service run on **Coolify** (self-hosted on a Hostinger VPS)
+and auto-deploy on push to `main`:
 
 ```bash
 git push origin main
-# .github/workflows/deploy.yml triggers the Coolify deploy API (with retries)
+# .github/workflows/deploy.yml triggers the Coolify deploy API for both apps (with retries)
 ```
 
-- **Build:** nixpacks, Node 22, port 3000. `NIXPACKS_INSTALL_CMD=npm install`
-  avoids cross-OS lockfile drift.
-- **Env vars:** set in Coolify → application → Environment Variables. Mark every
-  `NEXT_PUBLIC_*` and `BETTER_AUTH_URL` as **build-time**; secrets (including
-  `RESEND_API_KEY` / `RESEND_FROM_EMAIL`) are runtime.
+| Resource | Where | Build |
+|---|---|---|
+| Frontend (Next.js) | `https://resumatch.zeeshanai.cloud`, port 3000 | Railpack, Node 22, `RAILPACK_INSTALL_CMD=npm install` (avoids cross-OS lockfile drift) |
+| Backend (FastAPI) | `https://api.resumatch.zeeshanai.cloud`, port 8000, health `/health` | Dockerfile in `backend/` |
+| MinIO (resume files) | internal only, private bucket `resumatch` | `minio/minio` service |
+
+- **Env vars:** set in Coolify → application → Environment Variables. Frontend: mark every
+  `NEXT_PUBLIC_*` (incl. `NEXT_PUBLIC_API_URL`) and `BETTER_AUTH_URL` as **build-time**; secrets
+  (including `RESEND_API_KEY` / `RESEND_FROM_EMAIL`) are runtime. Backend: the list is in
+  `backend/.env.example`; with `ENVIRONMENT=prod` it refuses to start without
+  `EMAIL_HASH_SALT`, `INTERNAL_API_KEY`, `STORAGE_BACKEND=s3` and `OPENAI_API_KEY`.
 - **Paste `RESEND_FROM_EMAIL` without quotes.** dotenv strips quotes locally but
   Coolify passes the raw string through, so a quoted value fails in production
   only — with a Resend `422 validation_error` on the `from` field.
 - **DB host:** inside the container use the docker0 gateway IP (e.g. `10.0.0.1`),
   not the public IP, in `DATABASE_URL`.
 - **Auto-deploy secrets** (repo → Settings → Secrets → Actions):
-  `COOLIFY_APP_UUID`, `COOLIFY_API_TOKEN` (deploy-scoped).
+  `COOLIFY_APP_UUID` (frontend), `COOLIFY_BACKEND_APP_UUID`, `COOLIFY_API_TOKEN` (deploy-scoped).
 
 ### Self-hosted (generic)
 

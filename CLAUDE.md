@@ -64,6 +64,11 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 - Container `DATABASE_URL` uses the **docker0 gateway IP `10.0.0.1`**, not the public IP. Build uses `NIXPACKS_INSTALL_CMD=npm install` (cross-OS lockfile drift), Node 22.
 - SSH admin: `ssh -i ~/.ssh/hostinger_vps_ed25519 root@76.13.7.106`; Coolify API on `http://localhost:8000/api/v1`.
 
+## backend/ (FastAPI, added in the rebuild — see `docs/plan/`)
+- Python 3.12 + uv. Run: `cd backend && docker compose -f docker-compose.dev.yml up -d && uv sync && uv run alembic upgrade head && uv run uvicorn app.main:app --reload` (port 8000); tests: `uv run pytest`.
+- Reads `backend/.env` only, **never** the repo-root `.env.local` (production `DATABASE_URL`). All settings/limits/model names live in `backend/app/config.py`; template `backend/.env.example`.
+- Not wired to the Next.js app yet (phase 4); n8n is still the live backend until the cutover. Migration `0002` truncates tables: do not run against production before the deploy phase.
+
 ## Conventions & gotchas
 - Client components using auth/session must be `"use client"` and use `useSession()`.
 - Wrap browser-only-state client trees in `next/dynamic` `{ ssr: false }` to avoid hydration-mismatch dead UI.

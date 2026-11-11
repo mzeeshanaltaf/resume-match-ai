@@ -203,6 +203,9 @@ class Job(Base):
     result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # {"code", "message", "details"} (same shape as API errors) when status = failed.
     error: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Internal bookkeeping, never exposed by the API (e.g. the credit reservations a job
+    # made, so a failure or restart can refund them).
+    meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=_now
     )
@@ -217,6 +220,13 @@ class GeneratedDocument(Base):
     __table_args__ = (
         CheckConstraint(_in_list("kind", GENERATED_DOCUMENT_KINDS), name="generated_documents_kind_check"),
         Index("ix_generated_documents_match_id", "match_id"),
+        # Tailored bullets are included in the match credit: at most one per match.
+        Index(
+            "uq_generated_documents_bullets_per_match",
+            "match_id",
+            unique=True,
+            postgresql_where=text("kind = 'tailored_bullets'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=_uuid)

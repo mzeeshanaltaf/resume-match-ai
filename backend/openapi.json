@@ -1,0 +1,3158 @@
+{
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "description": "Every non-2xx response body, and a failed job's ``error``.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "details": {
+            "default": null,
+            "title": "Details"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "AtsOptimization": {
+        "properties": {
+          "keywords_to_add": {
+            "items": {
+              "$ref": "#/components/schemas/KeywordToAdd"
+            },
+            "title": "Keywords To Add",
+            "type": "array"
+          },
+          "section_recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/SectionRecommendation"
+            },
+            "title": "Section Recommendations",
+            "type": "array"
+          },
+          "skills_to_rephrase": {
+            "items": {
+              "$ref": "#/components/schemas/SkillToRephrase"
+            },
+            "title": "Skills To Rephrase",
+            "type": "array"
+          }
+        },
+        "required": [
+          "keywords_to_add",
+          "skills_to_rephrase",
+          "section_recommendations"
+        ],
+        "title": "AtsOptimization",
+        "type": "object"
+      },
+      "CandidateMatchReport": {
+        "description": "Job Fit (candidate mode): the full report.",
+        "properties": {
+          "ats_optimization": {
+            "$ref": "#/components/schemas/AtsOptimization"
+          },
+          "detailed_analysis": {
+            "$ref": "#/components/schemas/DetailedAnalysis"
+          },
+          "improvement_suggestions": {
+            "$ref": "#/components/schemas/ImprovementSuggestions"
+          },
+          "match_summary": {
+            "$ref": "#/components/schemas/CandidateMatchSummary"
+          }
+        },
+        "required": [
+          "match_summary",
+          "detailed_analysis",
+          "improvement_suggestions",
+          "ats_optimization"
+        ],
+        "title": "CandidateMatchReport",
+        "type": "object"
+      },
+      "CandidateMatchSummary": {
+        "properties": {
+          "critical_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/CriticalGap"
+            },
+            "title": "Critical Gaps",
+            "type": "array"
+          },
+          "key_strengths": {
+            "items": {
+              "$ref": "#/components/schemas/KeyStrength"
+            },
+            "title": "Key Strengths",
+            "type": "array"
+          },
+          "overall_score_percent": {
+            "title": "Overall Score Percent",
+            "type": "integer"
+          },
+          "score_confidence": {
+            "title": "Score Confidence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "overall_score_percent",
+          "score_confidence",
+          "key_strengths",
+          "critical_gaps"
+        ],
+        "title": "CandidateMatchSummary",
+        "type": "object"
+      },
+      "CoverLetterContent": {
+        "properties": {
+          "closing": {
+            "title": "Closing",
+            "type": "string"
+          },
+          "paragraphs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Paragraphs",
+            "type": "array"
+          },
+          "salutation": {
+            "title": "Salutation",
+            "type": "string"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "salutation",
+          "paragraphs",
+          "closing",
+          "signature",
+          "text"
+        ],
+        "title": "CoverLetterContent",
+        "type": "object"
+      },
+      "CreditCosts": {
+        "properties": {
+          "cover_letter": {
+            "title": "Cover Letter",
+            "type": "integer"
+          },
+          "match": {
+            "title": "Match",
+            "type": "integer"
+          },
+          "screening_per_resume": {
+            "title": "Screening Per Resume",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "match",
+          "cover_letter",
+          "screening_per_resume"
+        ],
+        "title": "CreditCosts",
+        "type": "object"
+      },
+      "CreditTransactionOut": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "credits_delta": {
+            "title": "Credits Delta",
+            "type": "integer"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Snapshot"
+          },
+          "reference_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Id"
+          },
+          "transaction_type": {
+            "title": "Transaction Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "transaction_type",
+          "credits_delta",
+          "reference_id",
+          "name_snapshot",
+          "description",
+          "created_at"
+        ],
+        "title": "CreditTransactionOut",
+        "type": "object"
+      },
+      "CreditsOut": {
+        "properties": {
+          "balance": {
+            "title": "Balance",
+            "type": "integer"
+          },
+          "costs": {
+            "$ref": "#/components/schemas/CreditCosts"
+          }
+        },
+        "required": [
+          "balance",
+          "costs"
+        ],
+        "title": "CreditsOut",
+        "type": "object"
+      },
+      "CriticalGap": {
+        "properties": {
+          "gap": {
+            "title": "Gap",
+            "type": "string"
+          },
+          "impact_level": {
+            "title": "Impact Level",
+            "type": "string"
+          },
+          "jd_requirement": {
+            "title": "Jd Requirement",
+            "type": "string"
+          },
+          "remediation_difficulty": {
+            "title": "Remediation Difficulty",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gap",
+          "jd_requirement",
+          "impact_level",
+          "remediation_difficulty"
+        ],
+        "title": "CriticalGap",
+        "type": "object"
+      },
+      "DetailedAnalysis": {
+        "properties": {
+          "gaps_and_weak_matches": {
+            "items": {
+              "$ref": "#/components/schemas/GapWeakMatch"
+            },
+            "title": "Gaps And Weak Matches",
+            "type": "array"
+          },
+          "requirements_met": {
+            "items": {
+              "$ref": "#/components/schemas/RequirementMet"
+            },
+            "title": "Requirements Met",
+            "type": "array"
+          }
+        },
+        "required": [
+          "requirements_met",
+          "gaps_and_weak_matches"
+        ],
+        "title": "DetailedAnalysis",
+        "type": "object"
+      },
+      "DocumentJobResult": {
+        "description": "``result`` of a succeeded ``tailored_bullets`` or ``cover_letter`` job.",
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/GeneratedDocumentOut"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "document"
+        ],
+        "title": "DocumentJobResult",
+        "type": "object"
+      },
+      "EraseRequest": {
+        "additionalProperties": false,
+        "description": "Body of ``DELETE /internal/users/{id}``. The email is required: the salted hash of it\nis what stops delete-and-re-register farming of the signup credits.",
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "EraseRequest",
+        "type": "object"
+      },
+      "EraseResult": {
+        "properties": {
+          "cancelled_jobs": {
+            "title": "Cancelled Jobs",
+            "type": "integer"
+          },
+          "deleted": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Deleted",
+            "type": "object"
+          },
+          "objects_deleted": {
+            "title": "Objects Deleted",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "deleted",
+          "objects_deleted",
+          "cancelled_jobs"
+        ],
+        "title": "EraseResult",
+        "type": "object"
+      },
+      "GapWeakMatch": {
+        "properties": {
+          "current_status": {
+            "title": "Current Status",
+            "type": "string"
+          },
+          "impact_level": {
+            "title": "Impact Level",
+            "type": "string"
+          },
+          "jd_requirement": {
+            "title": "Jd Requirement",
+            "type": "string"
+          },
+          "requirement_type": {
+            "title": "Requirement Type",
+            "type": "string"
+          },
+          "suggested_action": {
+            "title": "Suggested Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "jd_requirement",
+          "requirement_type",
+          "current_status",
+          "impact_level",
+          "suggested_action"
+        ],
+        "title": "GapWeakMatch",
+        "type": "object"
+      },
+      "GeneratedDocumentOut": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TailoredBulletsContent"
+              },
+              {
+                "$ref": "#/components/schemas/CoverLetterContent"
+              }
+            ],
+            "title": "Content"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "tailored_bullets",
+              "cover_letter"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "match_id": {
+            "format": "uuid",
+            "title": "Match Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "match_id",
+          "kind",
+          "content",
+          "created_at"
+        ],
+        "title": "GeneratedDocumentOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ImprovementSuggestion": {
+        "properties": {
+          "effort_required": {
+            "title": "Effort Required",
+            "type": "string"
+          },
+          "example_phrasing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Example Phrasing"
+          },
+          "expected_impact": {
+            "title": "Expected Impact",
+            "type": "string"
+          },
+          "suggestion": {
+            "title": "Suggestion",
+            "type": "string"
+          }
+        },
+        "required": [
+          "suggestion",
+          "expected_impact",
+          "effort_required"
+        ],
+        "title": "ImprovementSuggestion",
+        "type": "object"
+      },
+      "ImprovementSuggestions": {
+        "properties": {
+          "high_priority": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementSuggestion"
+            },
+            "title": "High Priority",
+            "type": "array"
+          },
+          "medium_priority": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementSuggestion"
+            },
+            "title": "Medium Priority",
+            "type": "array"
+          },
+          "nice_to_have": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementSuggestion"
+            },
+            "title": "Nice To Have",
+            "type": "array"
+          }
+        },
+        "required": [
+          "high_priority",
+          "medium_priority",
+          "nice_to_have"
+        ],
+        "title": "ImprovementSuggestions",
+        "type": "object"
+      },
+      "JobAccepted": {
+        "description": "202 body for anything that runs as a background job.",
+        "properties": {
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "queued",
+            "enum": [
+              "queued",
+              "running"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "JobAccepted",
+        "type": "object"
+      },
+      "JobDescriptionCreate": {
+        "additionalProperties": false,
+        "description": "Exactly one of ``url`` or ``text``. Length against ``MAX_JD_CHARS`` is checked in the\nrouter (the limit is a setting, not a constant).",
+        "properties": {
+          "mode": {
+            "enum": [
+              "candidate",
+              "recruiter"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "JobDescriptionCreate",
+        "type": "object"
+      },
+      "JobDescriptionJobResult": {
+        "description": "``result`` of a succeeded ``jd_submit`` job.",
+        "properties": {
+          "jd_id": {
+            "format": "uuid",
+            "title": "Jd Id",
+            "type": "string"
+          },
+          "job_description": {
+            "$ref": "#/components/schemas/JobDescriptionOut"
+          }
+        },
+        "required": [
+          "jd_id",
+          "job_description"
+        ],
+        "title": "JobDescriptionJobResult",
+        "type": "object"
+      },
+      "JobDescriptionOut": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "jd_object": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jd Object"
+          },
+          "jd_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jd Url"
+          },
+          "mode": {
+            "enum": [
+              "candidate",
+              "recruiter"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "validation_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Note"
+          }
+        },
+        "required": [
+          "id",
+          "jd_url",
+          "mode",
+          "validation_note",
+          "jd_object",
+          "created_at"
+        ],
+        "title": "JobDescriptionOut",
+        "type": "object"
+      },
+      "JobOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/JobStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "steps",
+          "result",
+          "error",
+          "created_at",
+          "updated_at",
+          "finished_at"
+        ],
+        "title": "JobOut",
+        "type": "object"
+      },
+      "JobStep": {
+        "properties": {
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "done",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "JobStep",
+        "type": "object"
+      },
+      "KeyStrength": {
+        "properties": {
+          "evidence": {
+            "title": "Evidence",
+            "type": "string"
+          },
+          "jd_alignment": {
+            "title": "Jd Alignment",
+            "type": "string"
+          },
+          "strength": {
+            "title": "Strength",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strength",
+          "evidence",
+          "jd_alignment"
+        ],
+        "title": "KeyStrength",
+        "type": "object"
+      },
+      "KeywordToAdd": {
+        "properties": {
+          "context_suggestion": {
+            "title": "Context Suggestion",
+            "type": "string"
+          },
+          "frequency_recommendation": {
+            "title": "Frequency Recommendation",
+            "type": "string"
+          },
+          "keyword": {
+            "title": "Keyword",
+            "type": "string"
+          }
+        },
+        "required": [
+          "keyword",
+          "context_suggestion",
+          "frequency_recommendation"
+        ],
+        "title": "KeywordToAdd",
+        "type": "object"
+      },
+      "MatchCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "jd_id": {
+            "format": "uuid",
+            "title": "Jd Id",
+            "type": "string"
+          },
+          "resume_id": {
+            "format": "uuid",
+            "title": "Resume Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resume_id",
+          "jd_id"
+        ],
+        "title": "MatchCreate",
+        "type": "object"
+      },
+      "MatchJobResult": {
+        "description": "``result`` of a succeeded ``match`` job.",
+        "properties": {
+          "match": {
+            "$ref": "#/components/schemas/MatchOut"
+          },
+          "match_id": {
+            "format": "uuid",
+            "title": "Match Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "match_id",
+          "match"
+        ],
+        "title": "MatchJobResult",
+        "type": "object"
+      },
+      "MatchListItem": {
+        "description": "One row of the history / overview: enough to render the ledger without the report.",
+        "properties": {
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "jd_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jd Id"
+          },
+          "jd_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jd Url"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "mode": {
+            "enum": [
+              "candidate",
+              "recruiter"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "overall_score_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Score Percent"
+          },
+          "resume_file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume File Name"
+          },
+          "resume_id": {
+            "format": "uuid",
+            "title": "Resume Id",
+            "type": "string"
+          },
+          "score_confidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Confidence"
+          }
+        },
+        "required": [
+          "id",
+          "resume_id",
+          "jd_id",
+          "mode",
+          "resume_file_name",
+          "job_title",
+          "company_name",
+          "jd_url",
+          "overall_score_percent",
+          "score_confidence",
+          "created_at"
+        ],
+        "title": "MatchListItem",
+        "type": "object"
+      },
+      "MatchOut": {
+        "description": "The full report plus any tailored bullets / cover letters generated for it.",
+        "properties": {
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/GeneratedDocumentOut"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "jd_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jd Id"
+          },
+          "jd_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jd Url"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "mode": {
+            "enum": [
+              "candidate",
+              "recruiter"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "overall_score_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Score Percent"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateMatchReport"
+              },
+              {
+                "$ref": "#/components/schemas/RecruiterMatchReport"
+              }
+            ],
+            "title": "Report"
+          },
+          "resume_file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume File Name"
+          },
+          "resume_id": {
+            "format": "uuid",
+            "title": "Resume Id",
+            "type": "string"
+          },
+          "score_confidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Confidence"
+          }
+        },
+        "required": [
+          "id",
+          "resume_id",
+          "jd_id",
+          "mode",
+          "resume_file_name",
+          "job_title",
+          "company_name",
+          "jd_url",
+          "overall_score_percent",
+          "score_confidence",
+          "created_at",
+          "report",
+          "documents"
+        ],
+        "title": "MatchOut",
+        "type": "object"
+      },
+      "OverviewCounts": {
+        "properties": {
+          "job_descriptions": {
+            "title": "Job Descriptions",
+            "type": "integer"
+          },
+          "matches": {
+            "title": "Matches",
+            "type": "integer"
+          },
+          "resumes": {
+            "title": "Resumes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resumes",
+          "job_descriptions",
+          "matches"
+        ],
+        "title": "OverviewCounts",
+        "type": "object"
+      },
+      "OverviewOut": {
+        "properties": {
+          "balance": {
+            "title": "Balance",
+            "type": "integer"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/OverviewCounts"
+          },
+          "recent_matches": {
+            "items": {
+              "$ref": "#/components/schemas/MatchListItem"
+            },
+            "title": "Recent Matches",
+            "type": "array"
+          }
+        },
+        "required": [
+          "balance",
+          "counts",
+          "recent_matches"
+        ],
+        "title": "OverviewOut",
+        "type": "object"
+      },
+      "RecruiterMatchReport": {
+        "description": "Screening (recruiter mode): score, confidence and a short rationale only.",
+        "properties": {
+          "match_summary": {
+            "$ref": "#/components/schemas/RecruiterMatchSummary"
+          }
+        },
+        "required": [
+          "match_summary"
+        ],
+        "title": "RecruiterMatchReport",
+        "type": "object"
+      },
+      "RecruiterMatchSummary": {
+        "properties": {
+          "overall_score_percent": {
+            "title": "Overall Score Percent",
+            "type": "integer"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "score_confidence": {
+            "title": "Score Confidence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "overall_score_percent",
+          "score_confidence",
+          "rationale"
+        ],
+        "title": "RecruiterMatchSummary",
+        "type": "object"
+      },
+      "RequirementMet": {
+        "properties": {
+          "jd_requirement": {
+            "title": "Jd Requirement",
+            "type": "string"
+          },
+          "match_quality": {
+            "title": "Match Quality",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "requirement_type": {
+            "title": "Requirement Type",
+            "type": "string"
+          },
+          "resume_evidence": {
+            "title": "Resume Evidence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "jd_requirement",
+          "requirement_type",
+          "resume_evidence",
+          "match_quality"
+        ],
+        "title": "RequirementMet",
+        "type": "object"
+      },
+      "ResumeJobResult": {
+        "description": "``result`` of a succeeded ``resume_upload`` job.",
+        "properties": {
+          "resume": {
+            "$ref": "#/components/schemas/ResumeOut"
+          },
+          "resume_id": {
+            "format": "uuid",
+            "title": "Resume Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resume_id",
+          "resume"
+        ],
+        "title": "ResumeJobResult",
+        "type": "object"
+      },
+      "ResumeOut": {
+        "description": "Resume metadata. Never includes the file bytes or (for lists) the extracted text.",
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name"
+          },
+          "file_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_scanned": {
+            "title": "Is Scanned",
+            "type": "boolean"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type"
+          },
+          "mode": {
+            "enum": [
+              "candidate",
+              "recruiter"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "num_characters": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Characters"
+          },
+          "num_pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Pages"
+          },
+          "num_words": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Words"
+          }
+        },
+        "required": [
+          "id",
+          "file_name",
+          "file_size",
+          "mime_type",
+          "num_pages",
+          "num_characters",
+          "num_words",
+          "is_scanned",
+          "mode",
+          "created_at"
+        ],
+        "title": "ResumeOut",
+        "type": "object"
+      },
+      "ScreeningCreate": {
+        "additionalProperties": false,
+        "description": "``resume_ids`` length against ``MAX_SCREENING_RESUMES`` is checked in the router (the\nlimit is a setting, not a constant).",
+        "properties": {
+          "jd_id": {
+            "format": "uuid",
+            "title": "Jd Id",
+            "type": "string"
+          },
+          "resume_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Resume Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "resume_ids",
+          "jd_id"
+        ],
+        "title": "ScreeningCreate",
+        "type": "object"
+      },
+      "ScreeningFailedItem": {
+        "properties": {
+          "error": {
+            "additionalProperties": true,
+            "title": "Error",
+            "type": "object"
+          },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name"
+          },
+          "resume_id": {
+            "format": "uuid",
+            "title": "Resume Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resume_id",
+          "file_name",
+          "error"
+        ],
+        "title": "ScreeningFailedItem",
+        "type": "object"
+      },
+      "ScreeningRankedItem": {
+        "properties": {
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name"
+          },
+          "match_id": {
+            "format": "uuid",
+            "title": "Match Id",
+            "type": "string"
+          },
+          "overall_score_percent": {
+            "title": "Overall Score Percent",
+            "type": "integer"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "resume_id": {
+            "format": "uuid",
+            "title": "Resume Id",
+            "type": "string"
+          },
+          "score_confidence": {
+            "title": "Score Confidence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rank",
+          "match_id",
+          "resume_id",
+          "file_name",
+          "overall_score_percent",
+          "score_confidence",
+          "rationale"
+        ],
+        "title": "ScreeningRankedItem",
+        "type": "object"
+      },
+      "ScreeningResult": {
+        "description": "The ``result`` of a succeeded ``screening`` job.",
+        "properties": {
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/ScreeningFailedItem"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "jd_id": {
+            "format": "uuid",
+            "title": "Jd Id",
+            "type": "string"
+          },
+          "ranked": {
+            "items": {
+              "$ref": "#/components/schemas/ScreeningRankedItem"
+            },
+            "title": "Ranked",
+            "type": "array"
+          },
+          "refunded_credits": {
+            "title": "Refunded Credits",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "jd_id",
+          "ranked",
+          "failed",
+          "refunded_credits"
+        ],
+        "title": "ScreeningResult",
+        "type": "object"
+      },
+      "SectionRecommendation": {
+        "properties": {
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "recommendation": {
+            "title": "Recommendation",
+            "type": "string"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section",
+          "recommendation",
+          "rationale"
+        ],
+        "title": "SectionRecommendation",
+        "type": "object"
+      },
+      "SkillToRephrase": {
+        "properties": {
+          "current_phrase": {
+            "title": "Current Phrase",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "suggested_rephrase": {
+            "title": "Suggested Rephrase",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_phrase",
+          "suggested_rephrase",
+          "reason"
+        ],
+        "title": "SkillToRephrase",
+        "type": "object"
+      },
+      "TailoredBullet": {
+        "properties": {
+          "original": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original"
+          },
+          "rewritten": {
+            "title": "Rewritten",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rewritten",
+          "why"
+        ],
+        "title": "TailoredBullet",
+        "type": "object"
+      },
+      "TailoredBulletsContent": {
+        "properties": {
+          "experience": {
+            "items": {
+              "$ref": "#/components/schemas/TailoredExperience"
+            },
+            "title": "Experience",
+            "type": "array"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "skills_to_emphasize": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skills To Emphasize",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "experience",
+          "skills_to_emphasize"
+        ],
+        "title": "TailoredBulletsContent",
+        "type": "object"
+      },
+      "TailoredExperience": {
+        "properties": {
+          "bullets": {
+            "items": {
+              "$ref": "#/components/schemas/TailoredBullet"
+            },
+            "title": "Bullets",
+            "type": "array"
+          },
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          }
+        },
+        "required": [
+          "heading",
+          "bullets"
+        ],
+        "title": "TailoredExperience",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "ResuMatchAI API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/internal/users/{user_id}": {
+      "delete": {
+        "description": "Request body: ``{\"email\": \"<the account's email>\"}`` (required). Idempotent: erasing a\nuser with no data succeeds, and the call can be repeated after a ``502``.\n\nAll app rows go in one transaction (with the salted email hash that makes a re-registration\nwith the same email start at 0 credits), then the objects under ``resumes/{user_id}/``.",
+        "operationId": "erase_user_internal_users__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EraseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EraseResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "FORBIDDEN: missing or wrong X-Internal-Key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "502": {
+            "description": "ERASE_INCOMPLETE: rows are gone, some objects were not removed; retry"
+          },
+          "503": {
+            "description": "INTERNAL_API_DISABLED: INTERNAL_API_KEY is not configured"
+          }
+        },
+        "summary": "Erase every piece of app data for a user (called by Better Auth before it deletes the account)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/v1/account/export": {
+      "get": {
+        "description": "Contents: ``profile.json``, ``resumes/`` (original files), ``resumes.json`` (details and\nextracted text), ``job_descriptions.json``, ``matches.json`` (full reports),\n``generated_documents.json``, ``credit_transactions.json`` and a ``README.txt``. The ZIP is\nbuilt into a temporary file (deleted after the response) and streamed.",
+        "operationId": "export_account_v1_account_export_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {}
+            },
+            "description": "The ZIP archive"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "EXPORT_RATE_LIMITED: details.retry_after_seconds, Retry-After header"
+          }
+        },
+        "summary": "Download everything you own as a ZIP (once per hour)",
+        "tags": [
+          "account"
+        ]
+      }
+    },
+    "/v1/credits": {
+      "get": {
+        "description": "The first authenticated call creates the account with the signup bonus.",
+        "operationId": "get_credits_v1_credits_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Credit balance and what each action costs",
+        "tags": [
+          "credits"
+        ]
+      }
+    },
+    "/v1/credits/transactions": {
+      "get": {
+        "operationId": "list_transactions_v1_credits_transactions_get",
+        "parameters": [
+          {
+            "description": "Omit to return the whole ledger.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Omit to return the whole ledger.",
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CreditTransactionOut"
+                  },
+                  "title": "Response List Transactions V1 Credits Transactions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "The credit ledger, newest first (total in X-Total-Count)",
+        "tags": [
+          "credits"
+        ]
+      }
+    },
+    "/v1/job-descriptions": {
+      "get": {
+        "operationId": "list_job_descriptions_v1_job_descriptions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobDescriptionOut"
+                  },
+                  "title": "Response List Job Descriptions V1 Job Descriptions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List your job descriptions, newest first (total in X-Total-Count)",
+        "tags": [
+          "job-descriptions"
+        ]
+      },
+      "post": {
+        "operationId": "create_job_description_v1_job_descriptions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobDescriptionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add a job description by URL or pasted text; processing runs as a job",
+        "tags": [
+          "job-descriptions"
+        ]
+      }
+    },
+    "/v1/job-descriptions/{jd_id}": {
+      "delete": {
+        "description": "Matches that used this job description are deleted with it (foreign key cascade).",
+        "operationId": "delete_job_description_v1_job_descriptions__jd_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "jd_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Jd Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete a job description",
+        "tags": [
+          "job-descriptions"
+        ]
+      },
+      "get": {
+        "operationId": "get_job_description_v1_job_descriptions__jd_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "jd_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Jd Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDescriptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read one job description",
+        "tags": [
+          "job-descriptions"
+        ]
+      }
+    },
+    "/v1/jobs/{job_id}": {
+      "get": {
+        "operationId": "get_job_v1_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job snapshot",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{job_id}/events": {
+      "get": {
+        "operationId": "job_events_v1_jobs__job_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live progress as Server-Sent Events",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/matches": {
+      "get": {
+        "operationId": "list_matches_v1_matches_get",
+        "parameters": [
+          {
+            "description": "Omit to return every match.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Omit to return every match.",
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MatchListItem"
+                  },
+                  "title": "Response List Matches V1 Matches Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Match history, newest first (total in X-Total-Count)",
+        "tags": [
+          "matches"
+        ]
+      },
+      "post": {
+        "description": "The candidate or recruiter prompt is chosen by the mode the resume (and job\ndescription) were added with. The credit is reserved before the AI call and refunded if\nthe analysis fails. Job result: ``{match_id, match: MatchOut}``.",
+        "operationId": "create_match_v1_matches_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "402": {
+            "description": "INSUFFICIENT_CREDITS"
+          },
+          "404": {
+            "description": "NOT_FOUND: the resume or job description is missing or not yours"
+          },
+          "422": {
+            "description": "INVALID_RESUME, INVALID_JD or MODE_MISMATCH"
+          }
+        },
+        "summary": "Match a resume against a job description (1 credit); runs as a job",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/v1/matches/{match_id}": {
+      "delete": {
+        "description": "Deletes only the match and the documents generated for it. The resume and the job\ndescription it used are not touched (the n8n version deleted all three).",
+        "operationId": "delete_match_v1_matches__match_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete one match (the resume and job stay)",
+        "tags": [
+          "matches"
+        ]
+      },
+      "get": {
+        "operationId": "get_match_v1_matches__match_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One full report with its generated documents",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/v1/matches/{match_id}/cover-letter": {
+      "post": {
+        "description": "Costs a credit each time it is generated; reserved up front, refunded on failure.\nJob result: ``{document_id, document: GeneratedDocumentOut}``.",
+        "operationId": "create_cover_letter_v1_matches__match_id__cover_letter_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "402": {
+            "description": "INSUFFICIENT_CREDITS"
+          },
+          "404": {
+            "description": "NOT_FOUND: no such match, or it is not yours"
+          },
+          "422": {
+            "description": "CANDIDATE_ONLY: recruiter screenings have no resume to tailor"
+          }
+        },
+        "summary": "Draft a cover letter for this match (1 credit)",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/v1/matches/{match_id}/tailored-bullets": {
+      "post": {
+        "description": "Free (the match credit covers it) and available once per match. Job result:\n``{document_id, document: GeneratedDocumentOut}``.",
+        "operationId": "create_tailored_bullets_v1_matches__match_id__tailored_bullets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "NOT_FOUND: no such match, or it is not yours"
+          },
+          "409": {
+            "description": "ALREADY_GENERATED: details.document_id holds the existing one"
+          },
+          "422": {
+            "description": "CANDIDATE_ONLY: recruiter screenings have no resume to tailor"
+          }
+        },
+        "summary": "Rewrite the resume's summary and bullets for this job (included in the match credit)",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/v1/overview": {
+      "get": {
+        "operationId": "get_overview_v1_overview_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Balance, counts and recent matches",
+        "tags": [
+          "overview"
+        ]
+      }
+    },
+    "/v1/resumes": {
+      "get": {
+        "operationId": "list_resumes_v1_resumes_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ResumeOut"
+                  },
+                  "title": "Response List Resumes V1 Resumes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List your resumes (metadata only)",
+        "tags": [
+          "resumes"
+        ]
+      },
+      "post": {
+        "operationId": "upload_resume_v1_resumes_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "mode": {
+                    "enum": [
+                      "candidate",
+                      "recruiter"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "mode"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload a resume (PDF, DOCX or TXT); processing runs as a job",
+        "tags": [
+          "resumes"
+        ]
+      }
+    },
+    "/v1/resumes/{resume_id}": {
+      "delete": {
+        "description": "Row first, then the object: a failed object delete leaves a harmless orphan that the\nstartup sweep removes, never a row pointing at a missing file. Matches that used this\nresume are deleted with it (foreign key cascade).",
+        "operationId": "delete_resume_v1_resumes__resume_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resume_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Resume Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete a resume and its file",
+        "tags": [
+          "resumes"
+        ]
+      }
+    },
+    "/v1/resumes/{resume_id}/file": {
+      "get": {
+        "operationId": "get_resume_file_v1_resumes__resume_id__file_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resume_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Resume Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream the original uploaded file",
+        "tags": [
+          "resumes"
+        ]
+      }
+    },
+    "/v1/screenings": {
+      "post": {
+        "description": "Recruiter mode only. Credits for the whole batch are reserved up front (all or\nnothing); each resume that fails is refunded individually and listed in ``failed``.\nOne step per resume (``score:<resume_id>``) streams progress. Job result:\n``ScreeningResult`` (ranked best first).",
+        "operationId": "create_screening_v1_screenings_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreeningCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "402": {
+            "description": "INSUFFICIENT_CREDITS (details.needed is the total for the batch)"
+          },
+          "404": {
+            "description": "NOT_FOUND: a resume or the job description is missing or not yours"
+          },
+          "422": {
+            "description": "TOO_MANY_RESUMES, INVALID_RESUME, INVALID_JD or MODE_MISMATCH"
+          }
+        },
+        "summary": "Screen up to MAX_SCREENING_RESUMES resumes against one job (1 credit each); runs as a job",
+        "tags": [
+          "screenings"
+        ]
+      }
+    }
+  }
+}

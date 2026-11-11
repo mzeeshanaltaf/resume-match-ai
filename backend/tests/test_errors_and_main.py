@@ -105,6 +105,13 @@ async def test_cors_allows_only_configured_origin(client: httpx.AsyncClient) -> 
     assert "access-control-allow-origin" not in denied.headers
 
 
+async def test_cors_exposes_the_headers_the_browser_client_reads(client: httpx.AsyncClient) -> None:
+    response = await client.get("/health", headers={"Origin": "https://app.test"})
+    exposed = {h.strip().lower() for h in response.headers["access-control-expose-headers"].split(",")}
+    # list totals, the export filename and the export retry delay (all read by the frontend)
+    assert {"x-total-count", "content-disposition", "retry-after"} <= exposed
+
+
 async def test_docs_hidden_in_production(make_settings: Callable[..., Any]) -> None:
     prod = create_app(make_settings(environment="prod"))
     transport = httpx.ASGITransport(app=prod, raise_app_exceptions=False)
@@ -114,7 +121,7 @@ async def test_docs_hidden_in_production(make_settings: Callable[..., Any]) -> N
 
 
 async def test_protected_route_requires_token(client: httpx.AsyncClient) -> None:
-    response = await client.get("/v1/me")
+    response = await client.get("/v1/credits")
     assert response.status_code == 401
     assert _shape(response)["code"] == "AUTH_REQUIRED"
 
@@ -122,23 +129,23 @@ async def test_protected_route_requires_token(client: httpx.AsyncClient) -> None
 # ── With a database ─────────────────────────────────────────────────────────
 
 
-async def test_me_with_token_creates_account_with_signup_credits(
+async def test_credits_with_token_creates_account_with_signup_credits(
     db_client: httpx.AsyncClient, bearer: Callable[..., dict]
 ) -> None:
-    response = await db_client.get("/v1/me", headers=bearer(sub="new-user", email="a@example.com"))
+    response = await db_client.get("/v1/credits", headers=bearer(sub="new-user", email="a@example.com"))
     assert response.status_code == 200
-    assert response.json() == {"user_id": "new-user", "credits": 10}
+    assert response.json()["balance"] == 10
     # Second call does not grant again.
-    again = await db_client.get("/v1/me", headers=bearer(sub="new-user", email="a@example.com"))
-    assert again.json()["credits"] == 10
+    again = await db_client.get("/v1/credits", headers=bearer(sub="new-user", email="a@example.com"))
+    assert again.json()["balance"] == 10
 
 
-async def test_me_for_re_registered_deleted_email_starts_at_zero(
+async def test_credits_for_re_registered_deleted_email_starts_at_zero(
     db_client: httpx.AsyncClient, bearer: Callable[..., dict], session: Any, settings: Any
 ) -> None:
     from app.services import credits
 
     await credits.record_deleted_account(session, "Gone@Example.com", settings)
     await session.commit()
-    response = await db_client.get("/v1/me", headers=bearer(sub="reborn", email="gone@example.com"))
-    assert response.json() == {"user_id": "reborn", "credits": 0}
+    response = await db_client.get("/v1/credits", headers=bearer(sub="reborn", email="gone@example.com"))
+    assert response.json()["balance"] == 0

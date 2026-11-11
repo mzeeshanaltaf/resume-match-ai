@@ -67,7 +67,7 @@ def jd_checksum(source: str, is_candidate: bool, user_id: str) -> str:
 # ── Row -> API model ────────────────────────────────────────────────────────
 
 
-def _mode(is_candidate: bool | None) -> Mode:
+def mode_of(is_candidate: bool | None) -> Mode:
     return "candidate" if is_candidate else "recruiter"
 
 
@@ -81,7 +81,7 @@ def resume_out(row: UserResume) -> ResumeOut:
         num_characters=row.num_characters,
         num_words=row.num_words,
         is_scanned=bool(row.is_scanned),
-        mode=_mode(row.is_candidate),
+        mode=mode_of(row.is_candidate),
         created_at=row.created_at,
     )
 
@@ -90,7 +90,7 @@ def jd_out(row: UserJd) -> JobDescriptionOut:
     return JobDescriptionOut(
         id=row.url_id,
         jd_url=row.jd_url,
-        mode=_mode(row.is_candidate),
+        mode=mode_of(row.is_candidate),
         validation_note=row.validation_note,
         jd_object=row.jd_object,
         created_at=row.created_at,

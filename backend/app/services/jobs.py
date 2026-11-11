@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 WorkFn = Callable[["JobContext"], Awaitable[dict[str, Any] | None]]
 FailureHook = Callable[[AsyncSession, "JobContext", dict[str, Any]], Awaitable[None]]
 RecoveryHandler = Callable[[AsyncSession, Job], Awaitable[None]]
+SetupFn = Callable[[AsyncSession], Awaitable[None]]
 SessionMakerProvider = Callable[[], async_sessionmaker[AsyncSession]]
 
 Event = tuple[str, dict[str, Any]]  # (event name, JSON-able data)
@@ -101,23 +102,35 @@ class _Channel:
 class JobContext:
     """Handed to a job's work function: its identity, DB access and progress reporting."""
 
-    def __init__(self, runner: JobRunner, job_id: uuid.UUID, user_id: str, kind: str) -> None:
+    def __init__(
+        self,
+        runner: JobRunner,
+        job_id: uuid.UUID,
+        user_id: str,
+        kind: str,
+        meta: dict[str, Any] | None = None,
+    ) -> None:
         self._runner = runner
         self.id = job_id
         self.user_id = user_id
         self.kind = kind
+        # Internal bookkeeping stored on the row (never returned by the API).
+        self.meta: dict[str, Any] = meta or {}
         self.steps: list[dict[str, Any]] = []
+        # Steps may run in parallel (a screening scores several resumes at once); writes are
+        # serialised so an older snapshot can never overwrite a newer one.
+        self._steps_lock = asyncio.Lock()
 
     @property
     def sessionmaker(self) -> async_sessionmaker[AsyncSession]:
         return self._runner.sessionmaker
 
     async def _persist_steps(self) -> None:
-        async with self.sessionmaker() as session:
-            await session.execute(
-                update(Job).where(Job.id == self.id).values(steps=copy.deepcopy(self.steps))
-            )
-            await session.commit()
+        async with self._steps_lock:
+            snapshot = copy.deepcopy(self.steps)  # taken under the lock, so writes arrive in order
+            async with self.sessionmaker() as session:
+                await session.execute(update(Job).where(Job.id == self.id).values(steps=snapshot))
+                await session.commit()
 
     async def _report(self, entry: dict[str, Any]) -> None:
         try:
@@ -154,6 +167,7 @@ class JobRunner:
         self._settings = settings
         self._channels: dict[uuid.UUID, _Channel] = {}
         self._tasks: set[asyncio.Task[None]] = set()
+        self._task_users: dict[asyncio.Task[None], str] = {}
         self._recovery: dict[str, RecoveryHandler] = {}
 
     @property
@@ -169,19 +183,37 @@ class JobRunner:
         kind: str,
         work: WorkFn,
         on_failure: FailureHook | None = None,
+        meta: dict[str, Any] | None = None,
+        setup: SetupFn | None = None,
     ) -> uuid.UUID:
-        """Create the job row, start the task, return the id immediately."""
+        """Create the job row, start the task, return the id immediately.
+
+        ``setup(session)`` runs in the **same transaction** that inserts the job row. A job
+        that spends credits reserves them there, so "credits taken" and "job exists" cannot
+        disagree: if ``setup`` raises (e.g. ``InsufficientCredits``) nothing is committed and
+        the exception propagates to the caller; if the process dies right after the commit
+        the job is still ``queued`` and startup recovery refunds it (using ``meta``).
+        """
         job_id = uuid.uuid4()
         async with self.sessionmaker() as session:
-            session.add(Job(id=job_id, user_id=user_id, kind=kind, status="queued", steps=[]))
+            session.add(
+                Job(id=job_id, user_id=user_id, kind=kind, status="queued", steps=[], meta=meta)
+            )
+            if setup is not None:
+                await setup(session)
             await session.commit()
 
         self._channels[job_id] = _Channel()
-        ctx = JobContext(self, job_id, user_id, kind)
+        ctx = JobContext(self, job_id, user_id, kind, meta)
         task = asyncio.create_task(self._run(ctx, work, on_failure), name=f"job-{kind}-{job_id}")
         self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._task_users[task] = user_id
+        task.add_done_callback(self._forget)
         return job_id
+
+    def _forget(self, task: asyncio.Task[None]) -> None:
+        self._tasks.discard(task)
+        self._task_users.pop(task, None)
 
     def publish(self, job_id: uuid.UUID, name: str, data: dict[str, Any]) -> None:
         channel = self._channels.get(job_id)
@@ -225,7 +257,13 @@ class JobRunner:
             await session.execute(
                 update(Job)
                 .where(Job.id == ctx.id)
-                .values(status="succeeded", result=encoded, error=None, finished_at=func.now())
+                .values(
+                    status="succeeded",
+                    result=encoded,
+                    error=None,
+                    steps=copy.deepcopy(ctx.steps),
+                    finished_at=func.now(),
+                )
             )
             await session.commit()
         self.publish(ctx.id, "succeeded", {"result": encoded})
@@ -289,6 +327,16 @@ class JobRunner:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def cancel_for_user(self, user_id: str) -> int:
+        """Cancel (and wait for) the user's running jobs. Each marks itself failed and runs
+        its failure hook (refunds). Used by account erase so no job writes new rows for a
+        user whose data is being deleted. Returns how many were cancelled."""
+        tasks = [task for task, owner in self._task_users.items() if owner == user_id]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        return len(tasks)
 
     def register_recovery(self, kind: str, handler: RecoveryHandler) -> None:
         """Run ``handler(session, job)`` for each interrupted job of ``kind`` at startup,

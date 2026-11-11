@@ -13,8 +13,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import Settings, get_settings
 from app.db import dispose_engine, get_sessionmaker
 from app.errors import register_exception_handlers
-from app.routers import job_descriptions, jobs, me, resumes
+from app.openapi import install_extra_schemas
+from app.routers import (
+    account,
+    credits,
+    documents,
+    internal,
+    job_descriptions,
+    jobs,
+    matches,
+    overview,
+    resumes,
+    screenings,
+)
 from app.services.jobs import JobRunner
+from app.services.runner import build_runner
 from app.services.storage import get_storage, sweep_orphaned_objects
 
 logger = logging.getLogger(__name__)
@@ -38,7 +51,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # In-process job runner (single container, single worker). Tests replace
     # ``app.state.job_runner`` with one bound to the test database.
-    job_runner = JobRunner(get_sessionmaker, settings)
+    # The runner refunds credit-spending jobs a crashed process left behind (recovery handlers).
+    job_runner = build_runner(get_sessionmaker, settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -75,7 +89,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=settings.cors_origins,  # the frontend origin(s) only
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
-        expose_headers=["Content-Disposition"],
+        # Headers the browser client must be able to read: the filename of a download,
+        # the list totals, and the wait before a rate-limited export can be retried.
+        expose_headers=["Content-Disposition", "X-Total-Count", "Retry-After"],
         max_age=600,
     )
     app.state.job_runner = job_runner
@@ -86,10 +102,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Liveness only: a database blip must not make the orchestrator restart us.
         return {"status": "ok"}
 
-    app.include_router(me.router)
     app.include_router(resumes.router)
     app.include_router(job_descriptions.router)
+    app.include_router(matches.router)
+    app.include_router(documents.router)
+    app.include_router(screenings.router)
     app.include_router(jobs.router)
+    app.include_router(overview.router)
+    app.include_router(credits.router)
+    app.include_router(account.router)
+    app.include_router(internal.router)
+    install_extra_schemas(app)
     return app
 
 

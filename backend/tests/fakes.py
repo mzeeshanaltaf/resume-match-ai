@@ -3,12 +3,33 @@
 from __future__ import annotations
 
 import io
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from types import SimpleNamespace as NS
 from typing import Any
 
 from app.errors import AppError
-from app.schemas import JdExtraction
+from app.schemas import (
+    AtsOptimization,
+    CandidateMatchReport,
+    CandidateMatchSummary,
+    CoverLetterOutput,
+    CriticalGap,
+    DetailedAnalysis,
+    GapWeakMatch,
+    ImprovementSuggestion,
+    ImprovementSuggestions,
+    JdExtraction,
+    KeyStrength,
+    KeywordToAdd,
+    RecruiterMatchReport,
+    RecruiterMatchSummary,
+    RequirementMet,
+    SectionRecommendation,
+    SkillToRephrase,
+    TailoredBullet,
+    TailoredBulletsOutput,
+    TailoredExperience,
+)
 from app.services.scraping import ScrapedPage
 
 RESUME_TEXT = (
@@ -121,6 +142,105 @@ def refusal_answer(name: str) -> Any:
     return NS(type="refusal", name=name)
 
 
+# ── Canned model outputs ────────────────────────────────────────────────────
+
+
+def candidate_report(score: int = 82) -> CandidateMatchReport:
+    suggestion = ImprovementSuggestion(
+        suggestion="Quantify the payment-service work",
+        example_phrasing="Built payment services handling 2M requests/day",
+        expected_impact="Shows scale",
+        effort_required="low",
+    )
+    return CandidateMatchReport(
+        match_summary=CandidateMatchSummary(
+            overall_score_percent=score,
+            score_confidence="high",
+            key_strengths=[
+                KeyStrength(strength="Python", evidence="Built payment services in Python", jd_alignment="5+ years Python")
+            ],
+            critical_gaps=[
+                CriticalGap(
+                    gap="No Kubernetes",
+                    jd_requirement="Kubernetes experience",
+                    impact_level="medium",
+                    remediation_difficulty="moderate",
+                )
+            ],
+        ),
+        detailed_analysis=DetailedAnalysis(
+            requirements_met=[
+                RequirementMet(
+                    jd_requirement="5+ years Python",
+                    requirement_type="must_have",
+                    resume_evidence="Six years of backend experience",
+                    match_quality="strong",
+                    notes=None,
+                )
+            ],
+            gaps_and_weak_matches=[
+                GapWeakMatch(
+                    jd_requirement="Kubernetes experience",
+                    requirement_type="preferred",
+                    current_status="Not mentioned",
+                    impact_level="medium",
+                    suggested_action="Add any container orchestration exposure",
+                )
+            ],
+        ),
+        improvement_suggestions=ImprovementSuggestions(
+            high_priority=[suggestion], medium_priority=[], nice_to_have=[]
+        ),
+        ats_optimization=AtsOptimization(
+            keywords_to_add=[
+                KeywordToAdd(keyword="Kubernetes", context_suggestion="Skills", frequency_recommendation="1x")
+            ],
+            skills_to_rephrase=[
+                SkillToRephrase(current_phrase="APIs", suggested_rephrase="REST APIs", reason="ATS keyword")
+            ],
+            section_recommendations=[
+                SectionRecommendation(section="Skills", recommendation="List tools", rationale="Parsing")
+            ],
+        ),
+    )
+
+
+def recruiter_report(score: int = 82) -> RecruiterMatchReport:
+    return RecruiterMatchReport(
+        match_summary=RecruiterMatchSummary(
+            overall_score_percent=score,
+            score_confidence="medium",
+            rationale="Strong Python and API background; no Kubernetes mentioned.",
+        )
+    )
+
+
+TAILORED_BULLETS = TailoredBulletsOutput(
+    summary="Backend engineer with six years building payment APIs in Python.",
+    experience=[
+        TailoredExperience(
+            heading="Senior Engineer, Acme Corp",
+            bullets=[
+                TailoredBullet(
+                    original="Built payment services in Python.",
+                    rewritten="Built and ran Python payment services behind the company's APIs.",
+                    why="Mirrors the job's API focus.",
+                )
+            ],
+        )
+    ],
+    skills_to_emphasize=["Python", "PostgreSQL"],
+    notes=None,
+)
+
+COVER_LETTER = CoverLetterOutput(
+    salutation="Dear Acme hiring team,",
+    paragraphs=["I am applying for the Senior Backend Engineer role.", "I have built payment APIs in Python."],
+    closing="Kind regards,",
+    signature="Jane Candidate",
+)
+
+
 # ── Fakes ───────────────────────────────────────────────────────────────────
 
 
@@ -143,6 +263,11 @@ class FakeLLM:
             requirements=["5+ years Python"],
             benefits=[],
         )
+        self.match_score = 82
+        # Score by the prompt input (recruiter inputs contain the resume text).
+        self.score_for: Callable[[Any], int] | None = None
+        # Awaited before every `parse` answer: sleep to hold a job open, raise to fail it.
+        self.parse_hook: Callable[[str, type, Any], Awaitable[None]] | None = None
         self.answers_override: Callable[[list[dict[str, Any]]], list[Any]] | None = None
         self.error: AppError | None = None  # raised by every call when set
         self.decide_calls: list[dict[str, Any]] = []
@@ -172,6 +297,16 @@ class FakeLLM:
         self.parse_calls.append({"task": task, "instructions": instructions, "input": input, "schema": schema})
         if self.error:
             raise self.error
+        if self.parse_hook:
+            await self.parse_hook(task, schema, input)  # may sleep or raise AppError
+        if schema is CandidateMatchReport:
+            return candidate_report(self.score_for(input) if self.score_for else self.match_score)
+        if schema is RecruiterMatchReport:
+            return recruiter_report(self.score_for(input) if self.score_for else self.match_score)
+        if schema is TailoredBulletsOutput:
+            return TAILORED_BULLETS
+        if schema is CoverLetterOutput:
+            return COVER_LETTER
         return self.extraction
 
 

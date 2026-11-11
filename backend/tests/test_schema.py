@@ -190,5 +190,5 @@ async def test_version_table_lives_in_resume_match(engine: AsyncEngine) -> None:
     async with engine.connect() as conn:
         version = await conn.scalar(text("SELECT version_num FROM resume_match.alembic_version"))
         in_public = await conn.scalar(text("SELECT to_regclass('public.alembic_version')"))
-    assert version == "0002_reshape_for_fastapi"
+    assert version == "0003_phase3_jobs_meta"
     assert in_public is None

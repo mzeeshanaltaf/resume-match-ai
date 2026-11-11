@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     job_channel_retention_seconds: int = Field(default=120, ge=0)
     sse_heartbeat_seconds: float = Field(default=15, gt=0)
 
+    # ── Matching / screening ────────────────────────────────────────────────
+    # Resumes analysed in parallel inside one screening job (each is one LLM call).
+    screening_concurrency: int = Field(default=3, ge=1)
+    # Recent matches listed by GET /v1/overview.
+    overview_recent_matches: int = Field(default=5, ge=0)
+
     # ── Credits ─────────────────────────────────────────────────────────────
     signup_credits: int = Field(default=10, ge=0)
     match_credit_cost: int = Field(default=1, gt=0)

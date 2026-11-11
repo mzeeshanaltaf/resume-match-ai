@@ -215,16 +215,18 @@ async def record_deleted_account(session: AsyncSession, email: str, settings: Se
 
 
 async def list_transactions(
-    session: AsyncSession, user_id: str, *, limit: int = 50, offset: int = 0
+    session: AsyncSession, user_id: str, *, limit: int | None = None, offset: int = 0
 ) -> list[UserCreditTransaction]:
-    rows = await session.scalars(
+    """Newest first. ``limit=None`` returns the whole ledger (there is no hidden cap)."""
+    stmt = (
         select(UserCreditTransaction)
         .where(UserCreditTransaction.user_id == user_id)
         .order_by(UserCreditTransaction.created_at.desc(), UserCreditTransaction.transaction_id)
-        .limit(limit)
         .offset(offset)
     )
-    return list(rows)
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    return list(await session.scalars(stmt))
 
 
 __all__ = [

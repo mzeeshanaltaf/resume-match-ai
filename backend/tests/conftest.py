@@ -27,10 +27,11 @@ from app.config import Settings, get_settings
 from app.db import build_engine, get_session
 from app.main import create_app
 from app.services.jobs import JobRunner
+from app.services.runner import build_runner
 from app.services.llm import get_llm
 from app.services.scraping import get_firecrawl
 from app.services.storage import LocalStorage, get_storage
-from tests.fakes import FakeFirecrawl, FakeLLM
+from tests.fakes import JD_TEXT, FakeFirecrawl, FakeLLM, make_pdf, unique_resume_text
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 TEST_DB_URL = os.environ.get(
@@ -224,7 +225,7 @@ def db_app(app: FastAPI, sessionmaker: async_sessionmaker[AsyncSession]) -> Fast
 
     app.dependency_overrides[get_session] = _session
     # Jobs run on the same test database (replaces the runner bound to the real engine).
-    app.state.job_runner = JobRunner(lambda: sessionmaker, app.dependency_overrides[get_settings]())
+    app.state.job_runner = build_runner(lambda: sessionmaker, app.dependency_overrides[get_settings]())
     return app
 
 
@@ -285,6 +286,43 @@ class Pipeline:
         body.setdefault("mode", "candidate")
         return await self.client.post("/v1/job-descriptions", json=body, headers=self.headers(sub))
 
+    async def jd_ok(self, sub: str = "user-1", *, mode: str = "candidate", n: int = 0) -> dict[str, Any]:
+        """Add a (valid, unique) job description by text and return it."""
+        text = JD_TEXT + (f" Reference {n}." if n else "")
+        job = await self.finish(await self.submit_jd(sub, text=text, mode=mode), sub)
+        assert job["status"] == "succeeded", job
+        return job["result"]["job_description"]
+
+    async def pair(
+        self, sub: str = "user-1", *, mode: str = "candidate", n: int = 0
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """A stored resume and job description for ``sub`` (same mode, unique per ``n``)."""
+        resume = await self.upload_ok(
+            make_pdf(text=unique_resume_text(n)), f"resume-{n}.pdf", mode=mode, sub=sub
+        )
+        return resume, await self.jd_ok(sub, mode=mode, n=n)
+
+    async def post_match(self, resume_id: str, jd_id: str, sub: str = "user-1") -> httpx.Response:
+        return await self.client.post(
+            "/v1/matches", json={"resume_id": resume_id, "jd_id": jd_id}, headers=self.headers(sub)
+        )
+
+    async def match_ok(self, resume_id: str, jd_id: str, sub: str = "user-1") -> dict[str, Any]:
+        """Run a match to completion and return the job's result (``{match_id, match}``)."""
+        job = await self.finish(await self.post_match(resume_id, jd_id, sub), sub)
+        assert job["status"] == "succeeded", job
+        return job["result"]
+
+    async def balance(self, sub: str = "user-1") -> int:
+        response = await self.client.get("/v1/credits", headers=self.headers(sub, email=f"{sub}@example.com"))
+        assert response.status_code == 200, response.text
+        return int(response.json()["balance"])
+
+    async def transactions(self, sub: str = "user-1") -> list[dict[str, Any]]:
+        response = await self.client.get("/v1/credits/transactions", headers=self.headers(sub))
+        assert response.status_code == 200, response.text
+        return list(response.json())
+
 
 @pytest_asyncio.fixture
 async def make_pipeline(
@@ -300,7 +338,7 @@ async def make_pipeline(
         app = create_app(settings)
         llm, firecrawl = FakeLLM(), FakeFirecrawl()
         storage = LocalStorage(settings.storage_local_dir)
-        runner = JobRunner(lambda: sessionmaker, settings)
+        runner = build_runner(lambda: sessionmaker, settings)
         app.state.job_runner = runner
 
         async def _session() -> AsyncIterator[AsyncSession]:

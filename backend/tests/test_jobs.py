@@ -300,3 +300,94 @@ async def test_app_startup_fails_leftover_jobs_and_shutdown_cancels_running_ones
         await started.wait()
 
     assert (await _row(sessionmaker, running)).status == "failed"  # cancelled by shutdown
+
+
+# ── Phase 3 additions: meta, setup transaction, parallel steps, cancel_for_user ──────────
+
+
+async def test_setup_runs_in_the_same_transaction_as_the_job_row(
+    runner: JobRunner, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    seen: list[str] = []
+
+    async def setup_ok(session: AsyncSession) -> None:
+        # The job row is already in this (uncommitted) transaction...
+        seen.append(str(await session.scalar(select(Job.kind).where(Job.user_id == "u-setup"))))
+
+    async def work(ctx: JobContext) -> dict[str, Any]:
+        return {"meta": ctx.meta}
+
+    job_id = await runner.submit(
+        user_id="u-setup", kind="match", work=work, meta={"reservations": [1]}, setup=setup_ok
+    )
+    await runner.wait_idle()
+    assert seen == ["match"]
+    row = await _row(sessionmaker, job_id)
+    assert row.meta == {"reservations": [1]} and row.result == {"meta": {"reservations": [1]}}
+
+
+async def test_setup_failure_creates_no_job_and_starts_nothing(
+    runner: JobRunner, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    ran = False
+
+    async def setup_fails(session: AsyncSession) -> None:
+        raise AppError(402, "INSUFFICIENT_CREDITS", "no")
+
+    async def work(ctx: JobContext) -> None:
+        nonlocal ran
+        ran = True
+
+    with pytest.raises(AppError):
+        await runner.submit(user_id="u-nope", kind="match", work=work, setup=setup_fails)
+    await runner.wait_idle()
+    assert ran is False
+    async with sessionmaker() as session:
+        assert (await session.scalars(select(Job).where(Job.user_id == "u-nope"))).all() == []
+
+
+async def test_parallel_steps_persist_a_consistent_final_state(
+    runner: JobRunner, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    async def one(ctx: JobContext, n: int) -> None:
+        async with ctx.step(f"s{n}", f"step {n}"):
+            await asyncio.sleep(0.01 * (n % 3))
+
+    async def work(ctx: JobContext) -> dict[str, Any]:
+        await asyncio.gather(*(one(ctx, n) for n in range(12)))
+        return {}
+
+    job_id = await runner.submit(user_id="u1", kind="screening", work=work)
+    await runner.wait_idle()
+    row = await _row(sessionmaker, job_id)
+    assert len(row.steps) == 12 and all(s["status"] == "done" for s in row.steps)
+
+
+async def test_cancel_for_user_only_touches_that_users_jobs(
+    runner: JobRunner, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+    hooked: list[str] = []
+
+    async def hook(session: AsyncSession, ctx: JobContext, error: dict[str, Any]) -> None:
+        hooked.append(ctx.user_id)
+
+    async def hold(ctx: JobContext) -> dict[str, Any]:
+        started.set()
+        await release.wait()
+        return {"done": True}
+
+    mine = await runner.submit(user_id="u-mine", kind="match", work=hold, on_failure=hook)
+    theirs = await runner.submit(user_id="u-theirs", kind="match", work=hold, on_failure=hook)
+    await started.wait()
+    await asyncio.sleep(0.05)
+
+    assert await runner.cancel_for_user("u-mine") == 1
+    release.set()
+    await runner.wait_idle()
+    assert (await _row(sessionmaker, mine)).status == "failed"
+    assert (await _row(sessionmaker, mine)).error["code"] == "JOB_INTERRUPTED"
+    assert (await _row(sessionmaker, theirs)).status == "succeeded"
+    assert hooked == ["u-mine"]  # the failure hook (refunds) ran for the cancelled job
+    assert await runner.cancel_for_user("nobody") == 0

@@ -49,3 +49,10 @@ works on 127.0.0.1 in production mode. `NEXT_DIST_DIR=.next-x` keeps it apart fr
 
 All of the scripts assume the local dev stack and the `resumatch_dev` database in the `resumatch-dev-postgres`
 container; they run SQL there to mark test users verified. Never point them at production.
+
+**Exception: `e2e-phase8-live.mjs`** is the one script written for production. It signs up one throwaway
+account on a Resend sandbox address (`delivered+...@resend.dev`, no real email), verifies it over SSH, runs a
+match and the MinIO checks, deletes the account and checks nothing is left. Needs ssh access to the VPS:
+`CORPUS=<dir from backend/dev/live_corpus.py> node scripts/e2e/e2e-phase8-live.mjs` (optional `APP_URL`,
+`API_URL`, `SSH_KEY`, `VPS`, `BACKEND_UUID`, `MINIO_UUID`, `BUCKET`). It spends 1 credit of the throwaway
+account and a few cents of OpenAI.

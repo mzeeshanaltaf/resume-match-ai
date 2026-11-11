@@ -13,7 +13,7 @@ Each session appends one section when it finishes. Read the whole file at the st
 | 5 Design system + marketing | Done (2026-11-11) | `phase-5-design-system` (stacked on `phase-4-frontend-data-layer`) | see `git log` on branch |
 | 6 Dashboard redesign | Done (2026-11-11) | `phase-6-dashboard` (stacked on `phase-5-design-system`) | see `git log` on branch |
 | 7 Local E2E verification | Done (2026-11-11) | `phase-7-verification` (stacked on `phase-6-dashboard`) | see `git log` on branch |
-| 8 Deployment | Not started | | |
+| 8 Deployment | Done (2026-11-11) | `phase-8-deployment` (merged to `main`, deployed) | see `git log` on `main` |
 
 ## Baseline (before phase 1)
 
@@ -537,3 +537,44 @@ This was the first contact with the **real** OpenAI (`gpt-6-luna`, Decisions API
 ### Next session starting point
 - Phase 8 (deployment). First: re-read the production environment above and `docs/plan/phase-8-deployment.md`; confirm with the user before running anything against the production DB (migration `0002` truncates tables) or pushing to `main` (that deploys). Verify real MinIO: upload, object exists, DB row has no binary, preview works, delete removes the object, bucket unreachable without credentials. Generate `EMAIL_HASH_SALT` and `INTERNAL_API_KEY`. After the first deploy run one live match on the production site and re-run `scripts/e2e/hydration-check.mjs` (`THROTTLE=6`) against it.
 - Must not break: `useClientSession()` instead of `useSession()` in render paths, the prod config guard, the report print path, `credits.costs` for every price shown, the 402 handling, `clearApiToken()` after deletion, `src/lib/api/*` contracts, the contact form, and nothing run against the production DB before Phase 8.
+
+## Phase 8: Deployment (Coolify) and cutover (done 2026-11-11, branch phase-8-deployment, merged to main)
+
+Phase 7's exit criteria were re-verified first: git clean, `npx tsc --noEmit` clean, `uv run pytest` = 374 passed / 1 skipped, as recorded. No gap. Disk on the VPS was 69% (30 GB free) with the weekly Docker cleanup cron active.
+
+### Built / done
+- **MinIO**: a **dedicated** service `resumatch-minio` (`ik0av0n8ajbxezjvhcf4jwn4`) in the ResuMatchAI project, no public domain, `coolify` network, internal endpoint `http://minio-ik0av0n8ajbxezjvhcf4jwn4:9000`, private bucket `resumatch`, a **bucket-scoped user** (policy `policy-resumatch`: get/put/delete object + list on that bucket only). Verified: put/get/ls/rm work with the scoped key; making another bucket, admin calls and anonymous access are all `Access Denied`; port 9000 is not reachable from the internet.
+- **DNS**: `A api.resumatch` -> `76.13.7.106`, TTL 300 (Hostinger). `resumatch` already was an A record to the VPS.
+- **Backend app** `kupjhfcdqsn2xnh9b41iqysc` (`resumatch-api`): same repo, base dir `/backend`, Dockerfile, port 8000, `https://api.resumatch.zeeshanai.cloud` (Let's Encrypt), health check `/health`, runtime env per Phase 7's list (secrets generated for `INTERNAL_API_KEY` and `EMAIL_HASH_SALT`, never printed or committed).
+- **Production DB** (run from the VPS, after a dump of the 5 app tables to `/root/backups/resumatch-app-tables-pre-fastapi-20261111T175406Z.sql`, 6.8 MB): the Better Auth `jwks` table (SQL equal to the CLI's output), then `alembic upgrade head` (`0001` no-op baseline, `0002` truncate + reshape, `0003`). Result verified: `storage_key` present, `file_binary_data` gone, app tables empty (were 12/14/13/10/57 rows), the 2 Better Auth users intact, `alembic_version = 0003_phase3_jobs_meta`.
+- **Frontend env**: added `NEXT_PUBLIC_API_URL` (build-time), `API_INTERNAL_URL` (= the backend's public URL), `INTERNAL_API_KEY`; removed the six unused `N8N_*` (kept `N8N_API_KEY`, contact form only; preview copies removed too).
+- **`.github/workflows/deploy.yml`** deploys both apps (matrix backend + frontend, secret `COOLIFY_BACKEND_APP_UUID`), uses **POST**, ignores docs-only pushes (`docs/**`, `**/*.md`).
+- **Merged to `main` and pushed**; both Coolify deploys finished on the first push.
+- **n8n**: the five ResuMatchAI workflows (`Ax1nPnp3l4lgBkEphH95d`, `7xy7anLV2JzhJ1qmulltw`, `_gLj78L7-ygNY4F1RcH9F`, `FJgcvrmIAG6K53AO`, `d9Kx7UtvC4cApQZ7`) deactivated with `n8n update:workflow --active=false` after the live match was verified. `ResuMatch Contact Form` (`5zhOTLWVyK865txB`) is still active.
+- **User-requested follow-ups**: OpenAI service tier default changed `flex` -> `default` (`LLM_SERVICE_TIER`; tests updated, plus a test that a failure on the default tier is not retried on the same tier). `CLAUDE.md` (and the same stale line in `README.md`) say **Railpack**, not Nixpacks, after confirming in Coolify (`build_pack=railpack`, `RAILPACK_INSTALL_CMD` / `RAILPACK_NODE_VERSION` set, `coolify-railpack` buildx builder on the VPS).
+
+### Deviations from the plan (and why)
+- **MinIO is dedicated, not reused.** The plan prefers reuse; all 5 existing MinIO services belong to other projects (one per project is this box's pattern) and the permission layer refused use of another project's root credentials. A dedicated service costs one small container.
+- **The backend was first deployed from the pushed `phase-8-deployment` branch** (Coolify builds from GitHub and `main` had no `backend/` yet), smoke-tested, then set back to `main` before the cutover push.
+- **Dockerfile gained `curl`**: Coolify's health check runs `curl`/`wget` inside the container, and `python:3.12-slim` has neither (first deploy rolled back as unhealthy). The image's own Python HEALTHCHECK stays.
+- **The old workflow was calling the deploy API with GET** (Coolify now answers 405). `origin/main` had one extra commit doing the same POST fix; it was merged (conflict in `deploy.yml` resolved to this branch's matrix version), no force push.
+- **`jwks` was created by SQL, not `npx @better-auth/cli migrate`**: that CLI needs the production URL on a dev machine (blocked here by the permission layer); the DDL was taken from the dev DB the CLI created and applied with `CREATE TABLE IF NOT EXISTS` from the VPS.
+- **`minio/mc` is not pullable**; the bucket and user were created with the `mc` that ships inside the MinIO container.
+- The `/internal/*` route is still reachable on the public API host (key-guarded; unchanged accepted risk).
+
+### Exit criteria (all run against production)
+- `https://api.resumatch.zeeshanai.cloud/health` 200; `/api/auth/ok` 200; `/api/auth/jwks` serves an EdDSA key; backend `/docs` 404; no token 401; `/internal` without key 403; CORS allows only `https://resumatch.zeeshanai.cloud`.
+- `node scripts/e2e/e2e-phase8-live.mjs` (new; `CORPUS` from `backend/dev/live_corpus.py`): **33/33 checks pass** on the live stack with real OpenAI: sign-up, refused until verified, JWT accepted by the live backend, 10 credits, resume upload 2.5 s, row has a `storage_key` and no binary, object exists in the bucket, `GET /file` returns the original bytes, bucket not reachable from the internet, JD 6.4 s, match 25 s with score 94 and exactly -1 credit, ledger `+10 / -1`, tailored bullets free, delete match keeps resume and JD, delete resume removes the object, **account deletion** removed every row (all app tables, jobs, Better Auth user/session/account) and the object prefix, sign-in no longer works, deleted-email hash recorded, **re-registering the same email gave 0 credits** (production `EMAIL_HASH_SALT` works). Both throwaway accounts were deleted by the script; it used a Resend sandbox address (`delivered+...@resend.dev`), so no real email was sent.
+- Container logs for both apps: no errors (the only warning is the post-deletion sign-in attempt). Backend logs show `LLM call ok: model=gpt-6-luna tier=default` (5 to 24 s per call).
+
+### Open issues / decisions deferred
+- **The n8n API key was not rotated** (the user chose to continue without it). Its value is still in the old workflow JSONs' `pinData` (and so in old repo history). The contact form uses it as `x-api-key`; rotate it in n8n and update `N8N_API_KEY` in Coolify.
+- **Not run**: Google sign-in and Google-only deletion, a real OTP email, Safari/Firefox, `scripts/e2e/hydration-check.mjs` against the live site, a visual pass in a real browser on the deployed UI (the Phase 7 production-build run covered it locally).
+- `LLM_TIMEOUT_SECONDS=600` was sized for flex; on the default tier a shorter timeout (about 120 s) would fail faster. Left unchanged (only the tier was requested).
+- Stale `NIXPACKS_*` env vars remain on the frontend app next to the `RAILPACK_*` ones (harmless; remove when convenient).
+- A pre-migration dump sits in `/root/backups/` on the VPS (dummy data); delete when no longer wanted.
+- Recommended later (from the plan): credit top-ups, move the contact form off n8n (then retire n8n for this app), per-user rate limiting, Langfuse/error reporting, block `/internal` at the proxy.
+
+### Next session starting point
+- The rebuild is complete. For any follow-up: `CLAUDE.md` is current. To re-verify production: `node scripts/e2e/e2e-phase8-live.mjs` (needs ssh access to the VPS and `CORPUS`).
+- Must not break: the prod config guard, `useClientSession()`, the `{code,message,details}` error shape, deploys via the workflow (POST, both apps), and the rule that production DB changes run from the VPS.

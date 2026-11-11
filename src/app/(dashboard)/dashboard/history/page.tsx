@@ -9,7 +9,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 export default function HistoryPage() {
-  const { matches, resumes, jds, loading } = useDashboardData();
+  const { matches, resumes, jds, loading, error } = useDashboardData();
   const searchParams = useSearchParams();
   const defaultTab = searchParams.get("tab") === "screener" ? "screener" : "job_fit";
 
@@ -64,7 +64,9 @@ export default function HistoryPage() {
         </Button>
       </div>
 
-      <HistoryTable initialMatches={matches ?? []} resumes={resumes ?? []} jds={jds ?? []} defaultTab={defaultTab} />
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <HistoryTable matches={matches ?? []} resumes={resumes ?? []} jds={jds ?? []} defaultTab={defaultTab} />
     </div>
   );
 }

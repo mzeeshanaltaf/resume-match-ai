@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import dynamic from "next/dynamic";
+import { useState, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -44,27 +43,24 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { MatchDetailDialog } from "./match-detail-dialog";
+import { ResumePreviewDialog, type PreviewTarget } from "./resume-preview-dialog";
 import { cn } from "@/lib/utils";
-import type { JobMatchSummary, ResumeRecord, JdRecord, JobDescription } from "@/types/n8n";
-
-const PdfViewer = dynamic(
-  () => import("@/components/pdf-viewer").then((m) => ({ default: m.PdfViewer })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-40 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    ),
-  }
-);
+import { api } from "@/lib/api/client";
+import { describeError } from "@/lib/api/errors";
+import { useDashboardData } from "@/contexts/dashboard-data";
+import type {
+  JobDescription,
+  JobDescriptionOut,
+  MatchListItem,
+  ResumeOut,
+} from "@/lib/api/types";
 
 type Tab = "job_fit" | "screener";
-type SortField = "match_score" | "updated_at";
+type SortField = "match_score" | "created_at";
 type SortDir = "asc" | "desc";
 
-function getScore(match: JobMatchSummary): number {
-  return match.job_match_summary?.match_summary?.overall_score_percent ?? 0;
+function getScore(match: MatchListItem): number {
+  return match.overall_score_percent ?? 0;
 }
 
 
@@ -87,36 +83,41 @@ function isValidUrl(str: string) {
   try { new URL(str); return true; } catch { return false; }
 }
 
-export function HistoryTable({ initialMatches, resumes, jds = [], defaultTab = "job_fit" }: { initialMatches: JobMatchSummary[]; resumes: ResumeRecord[]; jds?: JdRecord[]; defaultTab?: Tab }) {
-  const [matches, setMatches] = useState<JobMatchSummary[]>(initialMatches);
-  useEffect(() => { setMatches(initialMatches); }, [initialMatches]);
+export function HistoryTable({
+  matches,
+  resumes,
+  jds = [],
+  defaultTab = "job_fit",
+}: {
+  matches: MatchListItem[];
+  resumes: ResumeOut[];
+  jds?: JobDescriptionOut[];
+  defaultTab?: Tab;
+}) {
+  const { removeMatch, refreshAll } = useDashboardData();
 
-  // Build file_id → base64 lookup for PDF preview
-  const base64Map = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const r of resumes) {
-      if (r.file_id && r.file_base64) map.set(r.file_id, r.file_base64);
-    }
+  // resume id -> metadata, for the preview (file type decides PDF vs download)
+  const resumeMap = useMemo(() => {
+    const map = new Map<string, ResumeOut>();
+    for (const r of resumes) map.set(r.id, r);
     return map;
   }, [resumes]);
 
-  // Build url_id → JdRecord lookup for JD preview
+  // jd id -> record, for the job description preview
   const jdMap = useMemo(() => {
-    const map = new Map<string, JdRecord>();
-    for (const j of jds) {
-      if (j.url_id) map.set(j.url_id, j);
-    }
+    const map = new Map<string, JobDescriptionOut>();
+    for (const j of jds) map.set(j.id, j);
     return map;
   }, [jds]);
   const [activeTab, setActiveTab] = useState<Tab>(defaultTab);
   const [filter, setFilter] = useState("");
-  const [sortField, setSortField] = useState<SortField>("updated_at");
+  const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [viewMatch, setViewMatch] = useState<JobMatchSummary | null>(null);
+  const [viewMatchId, setViewMatchId] = useState<string | null>(null);
   const [viewJd, setViewJd] = useState<{ jd: JobDescription | null; jdUrl?: string } | null>(null);
-  const [previewResume, setPreviewResume] = useState<{ base64: string; fileName: string } | null>(null);
-  const [deletingKey, setDeletingKey] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<JobMatchSummary | null>(null);
+  const [previewResume, setPreviewResume] = useState<PreviewTarget | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<MatchListItem | null>(null);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -127,8 +128,8 @@ export function HistoryTable({ initialMatches, resumes, jds = [], defaultTab = "
     }
   }
 
-  const jobFitMatches = matches.filter((m) => m.is_candidate === true);
-  const screenerMatches = matches.filter((m) => m.is_candidate === false);
+  const jobFitMatches = matches.filter((m) => m.mode === "candidate");
+  const screenerMatches = matches.filter((m) => m.mode === "recruiter");
   const tabMatches = activeTab === "job_fit" ? jobFitMatches : screenerMatches;
 
   const filtered = tabMatches
@@ -136,45 +137,32 @@ export function HistoryTable({ initialMatches, resumes, jds = [], defaultTab = "
       if (!filter) return true;
       const q = filter.toLowerCase();
       return (
-        m.file_name?.toLowerCase().includes(q) ||
+        m.resume_file_name?.toLowerCase().includes(q) ||
         m.jd_url?.toLowerCase().includes(q) ||
-        m.file_id?.toLowerCase().includes(q) ||
-        m.job_description?.company_name?.toLowerCase().includes(q) ||
-        m.job_description?.job_title?.toLowerCase().includes(q)
+        m.company_name?.toLowerCase().includes(q) ||
+        m.job_title?.toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
       const mul = sortDir === "asc" ? 1 : -1;
       if (sortField === "match_score") return (getScore(a) - getScore(b)) * mul;
       return (
-        (new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime()) * mul
+        (new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime()) * mul
       );
     });
 
-  async function handleDelete(match: JobMatchSummary) {
-    const key = `${match.file_id ?? match.file_name}_${match.url_id ?? match.jd_url}`;
-    setDeletingKey(key);
+  async function handleDelete(match: MatchListItem) {
+    setDeletingId(match.id);
     try {
-      const id = match.file_id ?? match.summary_id ?? "";
-      const res = await fetch(`/api/match/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url_id: match.url_id }),
-      });
-      if (!res.ok) throw new Error();
-      setMatches((prev) =>
-        prev.filter((m) => {
-          if (match.file_id && match.url_id) {
-            return !(m.file_id === match.file_id && m.url_id === match.url_id);
-          }
-          return !(m.file_name === match.file_name && m.jd_url === match.jd_url);
-        })
-      );
-      toast.success("Match deleted successfully.");
-    } catch {
-      toast.error("Something went wrong. Please try again.");
+      // Removes only this analysis; the resume and job description stay.
+      await api.matches.remove(match.id);
+      removeMatch(match.id);
+      toast.success("Analysis deleted. Your resume and job description were kept.");
+      refreshAll(); // counts and overview
+    } catch (err) {
+      toast.error(describeError(err, "Something went wrong. Please try again."));
     } finally {
-      setDeletingKey(null);
+      setDeletingId(null);
     }
   }
 
@@ -265,7 +253,7 @@ export function HistoryTable({ initialMatches, resumes, jds = [], defaultTab = "
                     variant="ghost"
                     size="sm"
                     className="-ml-3 gap-1 font-medium"
-                    onClick={() => toggleSort("updated_at")}
+                    onClick={() => toggleSort("created_at")}
                   >
                     Date
                     <ArrowUpDown className="h-3.5 w-3.5" />
@@ -276,57 +264,56 @@ export function HistoryTable({ initialMatches, resumes, jds = [], defaultTab = "
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((match, i) => {
-                const key = `${match.file_id ?? match.file_name ?? i}_${match.url_id ?? match.jd_url ?? i}`;
-                const isDeleting = deletingKey === key;
+              {filtered.map((match) => {
+                const isDeleting = deletingId === match.id;
                 const score = getScore(match);
+                const resume = resumeMap.get(match.resume_id);
+                const jdRecord = match.jd_id ? jdMap.get(match.jd_id) : undefined;
+                const fileName = match.resume_file_name ?? "Unknown";
                 return (
-                  <TableRow key={`${key}_${i}`} className={cn(isDeleting && "opacity-50")}>
+                  <TableRow key={match.id} className={cn(isDeleting && "opacity-50")}>
                     <TableCell className="font-medium max-w-40">
-                      {base64Map.has(match.file_id) ? (
+                      {resume ? (
                         <button
                           onClick={() =>
                             setPreviewResume({
-                              base64: base64Map.get(match.file_id)!,
-                              fileName: match.file_name ?? "resume.pdf",
+                              id: resume.id,
+                              fileName: resume.file_name ?? fileName,
+                              mimeType: resume.mime_type,
                             })
                           }
                           className="flex items-center gap-1.5 text-left group"
-                          title="Preview PDF"
+                          title="Preview resume"
                         >
                           <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-emerald-500 transition-colors" />
                           <span className="block truncate text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 underline decoration-dotted underline-offset-2 transition-colors">
-                            {match.file_name ?? match.file_id ?? "Unknown"}
+                            {fileName}
                           </span>
                         </button>
                       ) : (
-                        <span className="block truncate text-sm">
-                          {match.file_name ?? match.file_id ?? "Unknown"}
-                        </span>
+                        <span className="block truncate text-sm">{fileName}</span>
                       )}
                     </TableCell>
                     <TableCell className="max-w-50">
-                      {(match.url_id && jdMap.has(match.url_id)) || match.jd_url ? (
+                      {jdRecord || match.jd_url ? (
                         <button
                           onClick={() => {
-                            const jdRecord = match.url_id ? jdMap.get(match.url_id) : undefined;
-                            const jdObj = jdRecord?.jd_object as JobDescription | undefined ?? null;
-                            const rawUrl = match.jd_url ?? jdRecord?.jd_url;
+                            const rawUrl = match.jd_url ?? jdRecord?.jd_url ?? undefined;
                             setViewJd({
-                              jd: jdObj,
+                              jd: jdRecord?.jd_object ?? null,
                               jdUrl: rawUrl && isValidUrl(rawUrl) ? rawUrl : undefined,
                             });
                           }}
                           className="group text-left min-w-0 w-full"
                           title="Preview job description"
                         >
-                          {match.job_description?.company_name || match.job_description?.job_title ? (
+                          {match.company_name || match.job_title ? (
                             <div className="min-w-0">
                               <span className="block truncate text-xs font-medium group-hover:text-emerald-600 dark:group-hover:text-emerald-400 underline decoration-dotted underline-offset-2 transition-colors">
-                                {match.job_description.company_name}
+                                {match.company_name}
                               </span>
                               <span className="block truncate text-xs text-muted-foreground">
-                                {match.job_description.job_title}
+                                {match.job_title}
                               </span>
                             </div>
                           ) : (
@@ -348,14 +335,14 @@ export function HistoryTable({ initialMatches, resumes, jds = [], defaultTab = "
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {match.updated_at ? formatDate(match.updated_at) : "—"}
+                      {match.created_at ? formatDate(match.created_at) : "—"}
                     </TableCell>
                     <TableCell>
                       <Button
                         variant="outline"
                         size="sm"
                         className="h-7 text-xs"
-                        onClick={() => setViewMatch(match)}
+                        onClick={() => setViewMatchId(match.id)}
                       >
                         View Report
                       </Button>
@@ -499,24 +486,9 @@ export function HistoryTable({ initialMatches, resumes, jds = [], defaultTab = "
         </DialogContent>
       </Dialog>
 
-      {/* PDF Preview Dialog */}
-      <Dialog open={!!previewResume} onOpenChange={(open) => !open && setPreviewResume(null)}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-base font-semibold truncate">
-              {previewResume?.fileName ?? "Resume Preview"}
-            </DialogTitle>
-          </DialogHeader>
-          {previewResume && (
-            <PdfViewer base64={previewResume.base64} fileName={previewResume.fileName} />
-          )}
-        </DialogContent>
-      </Dialog>
+      <ResumePreviewDialog target={previewResume} onClose={() => setPreviewResume(null)} />
 
-      <MatchDetailDialog
-        match={viewMatch}
-        onClose={() => setViewMatch(null)}
-      />
+      <MatchDetailDialog matchId={viewMatchId} onClose={() => setViewMatchId(null)} />
 
       <AlertDialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
         <AlertDialogContent>
@@ -524,8 +496,9 @@ export function HistoryTable({ initialMatches, resumes, jds = [], defaultTab = "
             <AlertDialogTitle>Delete this analysis?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete the match analysis
-              {pendingDelete?.file_name ? ` for "${pendingDelete.file_name}"` : ""}.
-              This action cannot be undone.
+              {pendingDelete?.resume_file_name ? ` for "${pendingDelete.resume_file_name}"` : ""}.
+              Your resume and job description are kept. The credit spent on this analysis
+              isn&apos;t returned. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -5,30 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RotateCcw, AlertCircle, History } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ResumeMatchResponse } from "@/types/n8n";
-
-export type ScreenResultItem = {
-  file_id: string;
-  file_name: string;
-  status: "success" | "error";
-  result?: ResumeMatchResponse;
-};
-
-function getScore(result: ResumeMatchResponse): number {
-  return result.job_match_summary?.match_summary?.overall_score_percent ?? 0;
-}
-
-function getConfidence(result: ResumeMatchResponse): string {
-  return result.job_match_summary?.match_summary?.score_confidence ?? "unknown";
-}
-
-function getRationale(result: ResumeMatchResponse): string {
-  const ms = result.job_match_summary?.match_summary;
-  if (ms?.rationale) return ms.rationale;
-  if (ms?.key_strengths?.length) return ms.key_strengths[0].strength;
-  if (ms?.critical_gaps?.length) return ms.critical_gaps[0].gap;
-  return "";
-}
+import { ApiError } from "@/lib/api/client";
+import { describeError } from "@/lib/api/errors";
+import type { ScreeningResult } from "@/lib/api/types";
 
 function scoreBadge(score: number) {
   if (score >= 75) return "border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300";
@@ -48,63 +27,56 @@ function confidenceClass(conf: string) {
 }
 
 interface ScreenResultsProps {
-  items: ScreenResultItem[];
+  result: ScreeningResult;
   onReset: () => void;
 }
 
-export function ScreenResults({ items, onReset }: ScreenResultsProps) {
+export function ScreenResults({ result, onReset }: ScreenResultsProps) {
   const router = useRouter();
-  const successful = items
-    .filter((i): i is ScreenResultItem & { status: "success"; result: ResumeMatchResponse } =>
-      i.status === "success" && !!i.result
-    )
-    .sort((a, b) => getScore(b.result) - getScore(a.result));
-
-  const failed = items.filter((i) => i.status === "error");
+  // The backend already ranks them; sorting again keeps this robust to ties.
+  const ranked = [...result.ranked].sort((a, b) => a.rank - b.rank);
+  const failed = result.failed;
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Screening Results</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {successful.length} resume{successful.length !== 1 ? "s" : ""} screened
+          {ranked.length} resume{ranked.length !== 1 ? "s" : ""} screened
           {failed.length > 0 && `, ${failed.length} failed`}
           . Ranked by match score.
+          {result.refunded_credits > 0 &&
+            ` ${result.refunded_credits} credit${result.refunded_credits === 1 ? " was" : "s were"} refunded for the failed ${failed.length === 1 ? "resume" : "resumes"}.`}
         </p>
       </div>
 
-      {successful.length > 0 && (
+      {ranked.length > 0 && (
         <div className="space-y-3">
-          {successful.map((item, i) => {
-            const score = getScore(item.result);
-            const conf = getConfidence(item.result);
-            const rationale = getRationale(item.result);
-            return (
-              <div key={item.file_id} className="rounded-lg border border-border p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="font-mono text-xs text-muted-foreground shrink-0">
-                      {i + 1}
-                    </span>
-                    <span className="text-sm font-medium truncate">{item.file_name}</span>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <Badge variant="outline" className={cn("text-xs font-bold", scoreBadge(score))}>
-                      {score}%
-                    </Badge>
-                    <span className={cn("text-xs font-semibold capitalize", confidenceClass(conf))}>
-                      {conf}
-                    </span>
-                  </div>
+          {ranked.map((item) => (
+            <div key={item.match_id} className="rounded-lg border border-border p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="font-mono text-xs text-muted-foreground shrink-0">
+                    {item.rank}
+                  </span>
+                  <span className="text-sm font-medium truncate">{item.file_name ?? "Resume"}</span>
                 </div>
-                {rationale && (
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {rationale}
-                  </p>
-                )}
+                <div className="flex items-center gap-3 shrink-0">
+                  <Badge variant="outline" className={cn("text-xs font-bold", scoreBadge(item.overall_score_percent))}>
+                    {item.overall_score_percent}%
+                  </Badge>
+                  <span className={cn("text-xs font-semibold capitalize", confidenceClass(item.score_confidence))}>
+                    {item.score_confidence}
+                  </span>
+                </div>
               </div>
-            );
-          })}
+              {item.rationale && (
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {item.rationale}
+                </p>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -119,8 +91,11 @@ export function ScreenResults({ items, onReset }: ScreenResultsProps) {
           </div>
           <ul className="space-y-1">
             {failed.map((item) => (
-              <li key={item.file_id} className="text-xs text-muted-foreground">
-                {item.file_name}
+              <li key={item.resume_id} className="text-xs text-muted-foreground">
+                {item.file_name ?? "Resume"}:{" "}
+                {describeError(
+                  new ApiError(0, item.error.code, item.error.message, item.error.details ?? null)
+                )}
               </li>
             ))}
           </ul>

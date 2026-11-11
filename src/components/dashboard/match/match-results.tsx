@@ -16,11 +16,11 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import type { ResumeMatchResponse } from "@/types/n8n";
+import type { MatchOut } from "@/lib/api/types";
 import Link from "next/link";
 
 interface MatchResultsProps {
-  result: ResumeMatchResponse;
+  result: MatchOut;
   onReset: () => void;
 }
 
@@ -94,10 +94,10 @@ function CollapsibleSection({
 }
 
 export function MatchResults({ result, onReset }: MatchResultsProps) {
-  const ms = result.job_match_summary?.match_summary;
-  const ats = result.job_match_summary?.ats_optimization;
-  const detailed = result.job_match_summary?.detailed_analysis;
-  const improvements = result.job_match_summary?.improvement_suggestions;
+  const ms = result.report?.match_summary;
+  const ats = result.report?.ats_optimization;
+  const detailed = result.report?.detailed_analysis;
+  const improvements = result.report?.improvement_suggestions;
 
   const score = ms?.overall_score_percent ?? 0;
   const confidence = ms?.score_confidence ?? "unknown";
@@ -400,7 +400,7 @@ export function MatchResults({ result, onReset }: MatchResultsProps) {
 function SuggestionCard({
   item,
 }: {
-  item: { suggestion: string; effort_required: string; expected_impact: string; example_phrasing: string };
+  item: { suggestion: string; effort_required: string; expected_impact: string; example_phrasing?: string | null };
 }) {
   return (
     <div className="rounded-md border border-border p-3 space-y-1.5">

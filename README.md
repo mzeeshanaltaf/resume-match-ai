@@ -1,6 +1,6 @@
 # ResuMatchAI
 
-An AI-powered SaaS application that matches resumes against job descriptions, providing intelligent scoring, gap analysis, and personalized recommendations using Claude AI via n8n workflows.
+An AI-powered SaaS application that matches resumes against job descriptions, providing intelligent scoring, gap analysis, and personalized recommendations. A Next.js frontend talks directly to a FastAPI backend (`backend/`) with a short-lived Better Auth JWT.
 
 **Live Demo:** [resumatch.zeeshanai.cloud](https://resumatch.zeeshanai.cloud)
 
@@ -28,10 +28,10 @@ An AI-powered SaaS application that matches resumes against job descriptions, pr
 - Search and filter analysis history
 
 ### ⚡ Credit System
-- Free tier: 5 analyses per month
-- Pay-as-you-go for additional analyses
+- 10 credits on signup; uploads and job-description processing are free
+- 1 credit per match analysis (and per resume in a screening); refunded if the analysis fails
 - Real-time credit tracking
-- Transaction history
+- Transaction history (the ledger)
 
 ## Tech Stack
 
@@ -39,7 +39,8 @@ An AI-powered SaaS application that matches resumes against job descriptions, pr
 - **UI Components:** shadcn/ui (Slate theme)
 - **Auth:** [Better Auth](https://better-auth.com) — email/password + Google OAuth, with enforced email-OTP verification and password reset, backed by Postgres
 - **Database:** Postgres — Better Auth tables (`user`, `session`, `account`, `verification`) in a `resume_match` schema
-- **Backend:** n8n webhooks (AI/data processing)
+- **Backend:** FastAPI service in [`backend/`](backend/README.md) (Python 3.12, SQLAlchemy, OpenAI, Firecrawl, MinIO); the browser calls it directly with a Better Auth JWT (EdDSA, verified via `/api/auth/jwks`)
+- **Contact form:** still an n8n webhook (the only remaining n8n use)
 - **Transactional email:** [Resend](https://resend.com) (verification & password-reset codes)
 - **Analytics:** self-hosted [Umami](https://umami.is)
 - **Rate limiting:** Upstash Redis (contact form)
@@ -73,13 +74,8 @@ src/
 │   │   │   └── settings/     # User settings & credits
 │   │   └── layout.tsx        # Dashboard shell with DashboardDataProvider
 │   ├── api/
-│   │   ├── auth/[...all]/    # Better Auth handler (+ /api/auth/ok health check)
-│   │   ├── contact/          # Contact form → n8n (honeypot + rate limit)
-│   │   ├── resume/           # Resume upload, list, delete
-│   │   ├── jd/               # Job description submit
-│   │   ├── match/            # Match analysis & history
-│   │   ├── analytics/        # User analytics
-│   │   └── credits/          # Credit balance & history
+│   │   ├── auth/[...all]/    # Better Auth handler (+ /api/auth/ok, /api/auth/jwks, /api/auth/token)
+│   │   └── contact/          # Contact form → n8n (honeypot + rate limit)
 │   ├── icon.tsx              # Generated 32×32 favicon (ImageResponse)
 │   ├── apple-icon.tsx        # Generated 180×180 Apple icon
 │   ├── opengraph-image.tsx   # Generated 1200×630 OG image
@@ -106,22 +102,19 @@ src/
 │   ├── ui/                   # shadcn/ui primitives
 │   └── theme-provider.tsx    # next-themes wrapper
 ├── contexts/
-│   └── dashboard-data.tsx    # DashboardDataProvider context (caches analytics, matches, credits)
+│   └── dashboard-data.tsx    # DashboardDataProvider (overview, matches, resumes, JDs, credits, ledger)
 ├── lib/
-│   ├── auth.ts               # Better Auth server config (pg Pool, providers, emailOTP, signup-credits hook)
-│   ├── auth-client.ts        # Better Auth React client (signIn/signUp/signOut/useSession/emailOtp)
+│   ├── auth.ts               # Better Auth server config (pg Pool, providers, emailOTP, jwt(), deleteUser → backend erase)
+│   ├── auth-client.ts        # Better Auth React client + cached API JWT (getApiToken / clearApiToken)
+│   ├── api/
+│   │   ├── client.ts         # Typed FastAPI client: JWT, {code,message,details} errors, SSE job events
+│   │   ├── types.ts          # Types for backend/openapi.json (incl. the match report)
+│   │   ├── errors.ts         # describeError(): user-facing message per error code
+│   │   └── limits.ts         # Upload limits shown in the UI (mirror the backend defaults)
 │   ├── email.ts              # Resend sender + OTP email template (server-only)
 │   ├── otp-sender.ts         # OTP_SENDER_EMAIL — client-safe sender address constant
-│   ├── get-user.ts           # getUserId() — server helper used by every protected API route
-│   ├── rate-limit.ts         # Upstash sliding-window limiter (fails open)
-│   ├── n8n.ts                # n8n webhook client
-│   ├── n8n-main.ts           # Resume processing, JD scraping, matching
-│   ├── n8n-analytics.ts      # User analytics
-│   ├── n8n-credits.ts        # Credit management (signupCredits granted by DB hook)
-│   ├── n8n-data.ts           # Data retrieval (resumes, JDs, matches)
-│   └── n8n-delete.ts         # Data deletion
-├── types/
-│   └── n8n.ts                # TypeScript types for n8n responses
+│   ├── get-user.ts           # getUserId() — server-side session helper
+│   └── rate-limit.ts         # Upstash sliding-window limiter (fails open)
 └── proxy.ts                  # Better Auth session-cookie gate for /dashboard/* (Next.js 16 middleware)
 ```
 
@@ -130,16 +123,19 @@ src/
 ### Data Flow
 
 ```
-User Action (Match/Screen) → API Route → n8n Webhook → Claude AI
-    ↓
-n8n processes & stores data
-    ↓
-API returns result
-    ↓
-UI updates via DashboardDataProvider context
-    ↓
-Dashboard automatically refreshes (Overview, History, Credits)
+Browser ──(Better Auth session cookie)──► Next.js /api/auth  ── issues a 15-min EdDSA JWT (/api/auth/token)
+   │
+   └──(Authorization: Bearer <JWT>)──► FastAPI /v1/*  ── verifies against Next.js /api/auth/jwks
+                                          │
+        uploads / JD / match / screening  │  202 {job_id}
+        ◄── SSE /v1/jobs/{id}/events ─────┘  (live steps, then the result)
 ```
+
+- The client (`src/lib/api/client.ts`) caches the JWT and refreshes it a minute before it expires.
+- Long work is a backend **job**: the UI shows the real steps from the event stream and falls
+  back to polling if the stream drops.
+- Account deletion: Better Auth's `user.deleteUser.beforeDelete` calls the backend's internal
+  erase endpoint first and aborts if it fails, so identity and data are never half-deleted.
 
 ### Authentication Flow
 
@@ -162,9 +158,9 @@ Google OAuth → arrives pre-verified, no code prompt
 
 ### DashboardDataProvider Context
 
-- **Fetches once** on dashboard mount: analytics, matches, credit balance & history
-- **refreshAll()** — called after Job Fit Analysis or Resume Screening completes
-- **refreshCredits()** — called after credit-consuming actions (resume upload)
+- **Fetches once** on dashboard mount: overview, credits (balance + prices), ledger, matches, resumes, job descriptions
+- **refreshAll()** — after a match, a screening or a delete (balance and counts change)
+- **refreshCredits()** — balance and ledger only
 - Syncs all dashboard pages automatically (no redundant API calls)
 
 ## Getting Started
@@ -174,7 +170,7 @@ Google OAuth → arrives pre-verified, no code prompt
 - Node.js 20+ (22 recommended)
 - npm
 - A Postgres database (Better Auth tables live in a `resume_match` schema)
-- n8n instance with configured webhooks
+- Python 3.12 + [uv](https://docs.astral.sh/uv/) and Docker (for the local backend and its Postgres)
 - A [Resend](https://resend.com) account with a **verified sending domain** (auth codes won't
   deliver without one — the `onboarding@resend.dev` sandbox only mails your own account address)
 - (Optional) Google OAuth 2.0 client, Upstash Redis, Umami instance
@@ -197,12 +193,19 @@ Google OAuth → arrives pre-verified, no code prompt
    cp .env.example .env.local
    ```
 
-   Fill in the values (see `.env.example` for the full list):
+   Fill in the values (see `.env.example` for the full list). For local work, prefer a
+   gitignored `.env.development.local` pointing at the local dev database (it overrides
+   `.env.local` for `npm run dev`, so a production `DATABASE_URL` in `.env.local` is never used):
    ```env
    # Better Auth
    BETTER_AUTH_SECRET=            # openssl rand -base64 32
-   BETTER_AUTH_URL=http://localhost:3000
+   BETTER_AUTH_URL=http://127.0.0.1:3000   # also the JWT issuer/audience
    DATABASE_URL=postgres://user:pass@host:5432/db
+
+   # FastAPI backend
+   NEXT_PUBLIC_API_URL=http://127.0.0.1:8000   # browser → backend (build-time)
+   API_INTERNAL_URL=http://127.0.0.1:8000      # this server → backend (account deletion)
+   INTERNAL_API_KEY=                           # must equal the backend's INTERNAL_API_KEY
 
    # Google OAuth (optional — button only shows when both are set)
    GOOGLE_CLIENT_ID=
@@ -215,14 +218,8 @@ Google OAuth → arrives pre-verified, no code prompt
    # Keep the address in sync with OTP_SENDER_EMAIL in src/lib/otp-sender.ts.
    RESEND_FROM_EMAIL=ResuMatchAI <noreply@verification.your-domain.com>
 
-   # n8n (webhook base URL + webhook IDs)
-   N8N_WEBHOOK_BASE_URL=https://your-n8n-instance.com/webhook
+   # Contact form webhook (the only n8n use left)
    N8N_API_KEY=your_n8n_api_key
-   N8N_MAIN_WEBHOOK_ID=...
-   N8N_ANALYTICS_WEBHOOK_ID=...
-   N8N_CREDITS_WEBHOOK_ID=...
-   N8N_DATA_WEBHOOK_ID=...
-   N8N_DELETE_WEBHOOK_ID=...
 
    # Umami (build-time) + Upstash (contact rate limit)
    NEXT_PUBLIC_UMAMI_SCRIPT_URL=
@@ -231,19 +228,34 @@ Google OAuth → arrives pre-verified, no code prompt
    UPSTASH_REDIS_REST_TOKEN=
    ```
 
-4. **Create the auth tables** (once per database)
+4. **Create the auth tables** (once per database; includes the `jwks` table for the JWT plugin)
    ```bash
-   # ensure the schema exists, then generate Better Auth tables inside it
+   # ensure the schema exists, then generate Better Auth tables inside it.
+   # Pass DATABASE_URL explicitly so the CLI can't pick up a different .env file.
    psql "$DATABASE_URL" -c "CREATE SCHEMA IF NOT EXISTS resume_match;"
-   npx @better-auth/cli@latest migrate
+   DATABASE_URL=... BETTER_AUTH_SECRET=... npx @better-auth/cli@latest migrate
    ```
 
-5. **Start development server**
+5. **Run the backend** (separate terminal; see [`backend/README.md`](backend/README.md))
+   ```bash
+   cd backend
+   docker compose -f docker-compose.dev.yml up -d   # dev Postgres on 127.0.0.1:5433
+   uv sync
+   cp .env.example .env     # set AUTH_JWKS_URL=http://127.0.0.1:3000/api/auth/jwks,
+                            # AUTH_ISSUER=http://127.0.0.1:3000, CORS_ORIGINS=http://127.0.0.1:3000,
+                            # INTERNAL_API_KEY=<same as the frontend>, plus OPENAI_API_KEY / FIRECRAWL_API_KEY
+   uv run alembic upgrade head
+   uv run uvicorn app.main:app --reload             # http://127.0.0.1:8000
+   # no AI keys? run the dev server with fake AI and real sign-in instead:
+   # DEV_REAL_AUTH=1 uv run python dev/dev_server.py
+   ```
+
+6. **Start the frontend**
    ```bash
    npm run dev
    ```
 
-   Access at `http://127.0.0.1:3000`
+   Access at `http://127.0.0.1:3000` (not `localhost`)
 
 ### Build
 
@@ -254,48 +266,18 @@ npm start
 
 ## API Endpoints
 
-### Authentication & Contact
-- `ALL /api/auth/[...all]` — Better Auth (sign-up/in/out, session, Google OAuth callback, and the
-  `email-otp/*` routes: `send-verification-otp`, `verify-email`, `request-password-reset`,
-  `reset-password`)
+### Next.js (this app)
+- `ALL /api/auth/[...all]` — Better Auth (sign-up/in/out, session, Google OAuth callback, the
+  `email-otp/*` routes, `GET /api/auth/token` → a JWT for the backend, `GET /api/auth/jwks`,
+  `POST /api/auth/delete-user`)
 - `GET /api/auth/ok` — health check → `{ status: "ok" }`
 - `POST /api/contact` — contact form → n8n (honeypot drop + per-IP rate limit)
 
-### Resume Management
-- `POST /api/resume/upload` — Upload and process a resume
-- `GET /api/resume/list` — List all user's resumes
-- `DELETE /api/resume/[id]` — Delete a resume
-
-### Job Description
-- `POST /api/jd/submit` — Submit and process a job description (URL or text)
-- `GET /api/jd/list` — List all user's job descriptions
-- `DELETE /api/jd/[id]` — Delete a job description
-
-### Matching & Screening
-- `POST /api/match/run` — Run resume-to-JD matching analysis
-- `GET /api/match/history` — Get all past analyses
-- `DELETE /api/match/[id]` — Delete an analysis
-
-### Analytics & Credits
-- `GET /api/analytics` — User statistics (resumes, JDs, matches processed)
-- `GET /api/credits/balance` — Current credit balance
-- `GET /api/credits/history` — Transaction history
-
-## n8n Webhook Contract
-
-All webhooks accept `POST` requests with:
-- Header: `x-api-key: {N8N_API_KEY}`
-- Body: JSON with `event_type` field routing to n8n switch nodes
-
-### Webhook Summary
-
-| Workflow | Purpose | Event Types |
-|----------|---------|------------|
-| **Main** | Resume processing, JD scraping, matching | `process_resume`, `scrape_jd`, `resume_match` |
-| **Analytics** | User statistics | `user_analytics` |
-| **Credits** | Credit balance & transactions | `signup_credits`, `get_remaining_credit`, `credit_history` |
-| **Data** | Retrieve stored data | `get_resume`, `get_jds`, `get_job_match_summary` |
-| **Delete** | Delete data | `delete_resume`, `delete_jd`, `delete_job_match_summary` |
+### FastAPI backend (`NEXT_PUBLIC_API_URL`)
+Everything else (resumes, job descriptions, matches, screenings, credits, overview, jobs/SSE,
+data export) is a `/v1/*` call from the browser. The contract is
+[`backend/openapi.json`](backend/openapi.json); the table of endpoints is in
+[`backend/README.md`](backend/README.md).
 
 ## Key Features Explained
 
@@ -312,15 +294,15 @@ All webhooks accept `POST` requests with:
 4. **Step 4:** View ranked results, sorted by match score
 
 ### Dashboard Overview
-- **Stats cards:** Total resumes, JDs, and matches processed
-- **Recent analyses:** 5 most recent screening results
+- **Stats cards:** Resumes, job descriptions and analyses
+- **Recent analyses:** 5 most recent analyses
 - **Quick actions:** Link to start new analysis
 
 ### History Page
 - **Sortable table:** Search, filter, and sort by score or date
 - **Tab switcher:** View Job Fit analyses or Resume Screenings separately
 - **Detail modal:** Click to view full analysis report
-- **Bulk delete:** Remove analyses from history
+- **Delete:** Removes only the analysis; the resume and job description stay (the credit spent isn't returned)
 
 ### Settings Page
 - **Profile tab:** Update name, change password, sign out (via Better Auth)
@@ -329,7 +311,7 @@ All webhooks accept `POST` requests with:
 
 ## Performance Optimizations
 
-- **Context-based caching:** Analytics, matches, and credits fetched once per session
+- **Context-based caching:** Overview, matches, resumes and credits fetched once per session
 - **Selective refreshing:** Only relevant data updates after workflows
 - **Server Components:** Used for data fetching (layout, pages)
 - **Client Components:** Used for interactivity (forms, uploads, dialogs)
@@ -401,23 +383,25 @@ Ensure all environment variables are set in your deployment platform.
 ## Troubleshooting
 
 ### "Failed to process job description"
-- Verify n8n webhook URL is accessible
-- Check `N8N_API_KEY` is correct
-- Ensure job URL is valid and publicly accessible
+- Check the backend is running and `NEXT_PUBLIC_API_URL` points at it
+- A job link the backend can't scrape: use "Paste text" instead
+- Backend `CORS_ORIGINS` must include the exact frontend origin (`http://127.0.0.1:3000` locally)
+
+### Every API call returns 401 / "session expired"
+- Backend `AUTH_ISSUER` must equal the frontend `BETTER_AUTH_URL` exactly, and `AUTH_JWKS_URL`
+  must be `{BETTER_AUTH_URL}/api/auth/jwks` (the `jwks` table must exist: run the Better Auth migration)
 
 ### Credits not updating
-- Check credit webhook response in n8n logs
-- Verify `N8N_CREDITS_WEBHOOK_ID` is correct
-- Clear browser cache and reload
+- Check the backend logs; a failed analysis is refunded automatically
+- Reload the dashboard (the balance is fetched from `/v1/credits`)
 
 ### Dark mode not persisting
 - Check if `suppressHydrationWarning` is on `<html>` tag
 - Verify `next-themes` is installed and provider is in root layout
 
 ### Resume upload fails
-- PDF file only (max 10 MB)
-- Check network tab for API errors
-- Verify `N8N_MAIN_WEBHOOK_ID` is correct
+- PDF, DOCX or TXT only, max 5 MB and 5 pages; the message says which limit was hit
+- Check the network tab for the backend's `{code, message}` error
 
 ## Contributing
 
@@ -451,7 +435,16 @@ For issues, questions, or feature requests:
 
 ## Changelog
 
-### v1.3.0 (Current)
+### v1.4.0 (Current)
+- ✅ Dashboard runs entirely on the FastAPI backend (`backend/`); the n8n API routes and clients are gone
+- ✅ Better Auth `jwt()` plugin: short-lived EdDSA tokens sent straight from the browser to the backend
+- ✅ Typed API client with live job progress over SSE (polling fallback)
+- ✅ Matches cost 1 credit (refunded on failure); signup credits are now granted by the backend
+- ✅ Deleting a match keeps the resume and job description; the resume picker lists existing resumes
+- ✅ Resumes can be PDF, DOCX or TXT; originals are previewed on demand through the API
+- ✅ Account deletion hook: erases backend data first, aborts if that fails
+
+### v1.3.0
 - ✅ **Enforced email verification** via Better Auth's `emailOTP` plugin — 6-digit codes, hashed at
   rest, 10-minute expiry, 3 attempts, 3 sends/60s
 - ✅ **Forgot-password flow** at `/forgot-password` (request code → set new password)
@@ -485,4 +478,4 @@ For issues, questions, or feature requests:
 
 ---
 
-Built with ❤️ using Next.js, Claude AI, and n8n
+Built with ❤️ using Next.js, FastAPI, and OpenAI

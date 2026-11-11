@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardData } from "@/contexts/dashboard-data";
 
-function formatDate(iso: string) {
+function formatDate(iso: string | null) {
+  if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -50,11 +51,11 @@ export function CreditsSection() {
           <p className="text-sm text-muted-foreground">No transactions yet.</p>
         ) : (
           <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
-            {creditHistory.map((tx, i) => (
-              <div key={i} className="flex items-center justify-between px-4 py-3">
+            {creditHistory.map((tx) => (
+              <div key={tx.id} className="flex items-center justify-between px-4 py-3">
                 <div>
                   <p className="text-sm font-medium capitalize">
-                    {tx.description || tx.transaction_type}
+                    {tx.description || tx.name_snapshot || tx.transaction_type.replace(/_/g, " ")}
                   </p>
                   <p className="text-xs text-muted-foreground">{formatDate(tx.created_at)}</p>
                 </div>

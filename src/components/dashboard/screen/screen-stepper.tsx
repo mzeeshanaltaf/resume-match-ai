@@ -8,31 +8,12 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useDashboardData } from "@/contexts/dashboard-data";
+import { api, isApiError, waitForJob } from "@/lib/api/client";
+import { describeError } from "@/lib/api/errors";
+import type { JobDescriptionJobResult, JobStep, ScreeningResult } from "@/lib/api/types";
 import { MultiResumePicker } from "./multi-resume-picker";
-import { ScreenResults, type ScreenResultItem } from "./screen-results";
-import type { ResumeRecord, ResumeMatchResponse } from "@/types/n8n";
-
-import { ShimmeringProgressDialog, type ProgressStep } from "@/components/dashboard/shimmering-progress-dialog";
-
-const JD_URL_STEPS: ProgressStep[] = [
-  { message: "Getting Job Description...", duration: 5000 },
-  { message: "Analyzing Job Description...", duration: 5000 },
-  { message: "Extracting Details...", duration: 10000 },
-  { message: "Almost there...", duration: Infinity },
-];
-
-const JD_TEXT_STEPS: ProgressStep[] = [
-  { message: "Analyzing Job Description...", duration: 5000 },
-  { message: "Extracting Details...", duration: 10000 },
-  { message: "Almost there...", duration: Infinity },
-];
-
-const SCREENING_STEPS: ProgressStep[] = [
-  { message: "Analyzing Resume...", duration: 5000 },
-  { message: "Analyzing Job Description...", duration: 5000 },
-  { message: "Generating Report...", duration: 5000 },
-  { message: "Almost there...", duration: Infinity },
-];
+import { ScreenResults } from "./screen-results";
+import { ShimmeringProgressDialog } from "@/components/dashboard/shimmering-progress-dialog";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -43,42 +24,53 @@ const STEPS = [
   { id: 4, label: "Results" },
 ];
 
+/** Progress text for a screening run: its steps are one `score:<id>` per resume, then `ranking`. */
+function screeningMessage(steps: JobStep[], total: number): string | undefined {
+  const scoring = steps.filter((s) => s.name.startsWith("score:"));
+  if (steps.some((s) => s.name === "ranking")) return "Ranking candidates…";
+  if (scoring.length === 0) return undefined;
+  const done = scoring.filter((s) => s.status !== "running").length;
+  return `Scoring resumes (${done} of ${total} done)…`;
+}
+
 export function ScreenStepper() {
-  const { refreshAll } = useDashboardData();
+  const { refreshAll, credits, creditBalance } = useDashboardData();
   const [currentStep, setCurrentStep] = useState<Step>(1);
-  // Picker state lifted here so going Back preserves uploaded resumes
-  const [pickerResumes, setPickerResumes] = useState<ResumeRecord[]>([]);
+  // Picker state lifted here so going Back preserves the selection
   const [pickerSelectedIds, setPickerSelectedIds] = useState<string[]>([]);
-  const [pickerShowUpload, setPickerShowUpload] = useState(true);
+  const [pickerShowUpload, setPickerShowUpload] = useState<boolean | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [selectedResumes, setSelectedResumes] = useState<ResumeRecord[]>([]);
-  const [results, setResults] = useState<ScreenResultItem[]>([]);
+  const [result, setResult] = useState<ScreeningResult | null>(null);
   const [jdMode, setJdMode] = useState<"url" | "text">("url");
   const [url, setUrl] = useState("");
   const [jdText, setJdText] = useState("");
-  const [urlId, setUrlId] = useState("");
+  const [jdId, setJdId] = useState("");
   const [processedJdInput, setProcessedJdInput] = useState<{ mode: "url" | "text"; value: string } | null>(null);
   const [processingJd, setProcessingJd] = useState(false);
+  const [jdSteps, setJdSteps] = useState<JobStep[]>([]);
   const [screening, setScreening] = useState(false);
-  const [progress, setProgress] = useState({ done: 0, total: 0, status: "" });
+  const [screenSteps, setScreenSteps] = useState<JobStep[]>([]);
   const [screenError, setScreenError] = useState<string | null>(null);
+
+  const perResume = credits?.costs.screening_per_resume ?? 1;
+  const totalCost = selectedIds.length * perResume;
+  const notEnoughCredits = creditBalance !== null && creditBalance < totalCost;
 
   function reset() {
     setCurrentStep(1);
-    setPickerResumes([]);
     setPickerSelectedIds([]);
-    setPickerShowUpload(true);
+    setPickerShowUpload(null);
     setSelectedIds([]);
-    setSelectedResumes([]);
-    setResults([]);
+    setResult(null);
     setJdMode("url");
     setUrl("");
     setJdText("");
-    setUrlId("");
+    setJdId("");
     setProcessedJdInput(null);
     setProcessingJd(false);
+    setJdSteps([]);
     setScreening(false);
-    setProgress({ done: 0, total: 0, status: "" });
+    setScreenSteps([]);
     setScreenError(null);
   }
 
@@ -104,33 +96,37 @@ export function ScreenStepper() {
     }
 
     // Skip reprocessing if the same JD was already processed successfully
-    if (urlId && processedJdInput?.mode === jdMode && processedJdInput?.value === currentValue) {
+    if (jdId && processedJdInput?.mode === jdMode && processedJdInput?.value === currentValue) {
+      setScreenError(null);
       setCurrentStep(3);
       return;
     }
 
     setProcessingJd(true);
-    try {
-      const jdBody: Record<string, unknown> = { is_candidate: false };
-      if (jdMode === "url") {
-        jdBody.url = url.trim();
-      } else {
-        jdBody.url = "";
-        jdBody.jd_text = jdText.trim();
-      }
-      const jdRes = await fetch("/api/jd/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(jdBody),
-      });
-      if (!jdRes.ok) throw new Error("Failed to process job description.");
-      const { url_id } = await jdRes.json();
-      setUrlId(url_id);
+    setJdSteps([]);
+    const accept = (id: string) => {
+      setJdId(id);
       setProcessedJdInput({ mode: jdMode, value: currentValue });
       setScreenError(null);
       setCurrentStep(3);
+    };
+    try {
+      const body =
+        jdMode === "url"
+          ? { url: currentValue, mode: "recruiter" as const }
+          : { text: currentValue, mode: "recruiter" as const };
+      const { job_id } = await api.jobDescriptions.submit(body);
+      const res = await waitForJob<JobDescriptionJobResult>(job_id, { onSteps: setJdSteps });
+      accept(res.jd_id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to process job description.");
+      // The same posting was added before: reuse it instead of failing.
+      const existing = isApiError(err, "DUPLICATE_JD") ? err.details?.jd_id : null;
+      if (typeof existing === "string") {
+        toast.info("You've already added this job description. Using the existing one.");
+        accept(existing);
+      } else {
+        toast.error(describeError(err, "Failed to process job description."));
+      }
     } finally {
       setProcessingJd(false);
     }
@@ -139,54 +135,22 @@ export function ScreenStepper() {
   async function startScreening() {
     setScreening(true);
     setScreenError(null);
-    setProgress({ done: 0, total: selectedIds.length, status: `Screening resume 1 of ${selectedIds.length}…` });
+    setScreenSteps([]);
 
     try {
-      const screenResults: ScreenResultItem[] = await Promise.all(
-        selectedIds.map(async (file_id) => {
-          const resume = selectedResumes.find((r) => r.file_id === file_id);
-          const file_name = resume?.file_name ?? file_id;
-          try {
-            const matchRes = await fetch("/api/match/run", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ file_id, url_id: urlId, is_candidate: false }),
-            });
-            if (!matchRes.ok) throw new Error();
-            const result: ResumeMatchResponse = await matchRes.json();
-            setProgress((p) => {
-              const done = p.done + 1;
-              return {
-                done,
-                total: p.total,
-                status: done < p.total ? `Screening resume ${done + 1} of ${p.total}…` : "Finishing up…",
-              };
-            });
-            return { file_id, file_name, status: "success" as const, result };
-          } catch {
-            setProgress((p) => {
-              const done = p.done + 1;
-              return {
-                done,
-                total: p.total,
-                status: done < p.total ? `Screening resume ${done + 1} of ${p.total}…` : "Finishing up…",
-              };
-            });
-            return { file_id, file_name, status: "error" as const };
-          }
-        })
-      );
-
-      setResults(screenResults);
-      refreshAll();
+      const { job_id } = await api.screenings.create(selectedIds, jdId);
+      const res = await waitForJob<ScreeningResult>(job_id, { onSteps: setScreenSteps });
+      setResult(res);
       toast.success("Screening complete!");
       setCurrentStep(4);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong.";
+      const msg = describeError(err, "Screening failed.");
       setScreenError(msg);
       toast.error(msg);
     } finally {
       setScreening(false);
+      // Credits were spent (and failed items refunded); history and counts changed.
+      refreshAll();
     }
   }
 
@@ -195,12 +159,14 @@ export function ScreenStepper() {
     <ShimmeringProgressDialog
       open={processingJd}
       title="Processing Job Description"
-      steps={jdMode === "url" ? JD_URL_STEPS : JD_TEXT_STEPS}
+      steps={jdSteps}
     />
     <ShimmeringProgressDialog
       open={screening}
       title="Screening"
-      steps={SCREENING_STEPS}
+      steps={screenSteps}
+      total={selectedIds.length + 1}
+      message={screeningMessage(screenSteps, selectedIds.length)}
     />
     <div className="space-y-8">
       {/* Step indicator */}
@@ -245,15 +211,12 @@ export function ScreenStepper() {
         {/* Step 1: Upload Resumes */}
         {currentStep === 1 && (
           <MultiResumePicker
-            onNext={(ids, resumes) => {
+            onNext={(ids) => {
               setSelectedIds(ids);
-              setSelectedResumes(resumes);
               setCurrentStep(2);
             }}
-            resumes={pickerResumes}
             selectedIds={pickerSelectedIds}
             showUpload={pickerShowUpload}
-            onResumesChange={setPickerResumes}
             onSelectedIdsChange={setPickerSelectedIds}
             onShowUploadChange={setPickerShowUpload}
           />
@@ -339,11 +302,7 @@ export function ScreenStepper() {
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => {
-                      setScreenError(null);
-                      setScreening(false);
-                      setProgress({ done: 0, total: 0, status: "" });
-                    }}
+                    onClick={() => setScreenError(null)}
                     className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
                   >
                     Retry
@@ -360,12 +319,24 @@ export function ScreenStepper() {
                 <p className="mt-2 text-sm text-muted-foreground">
                   {selectedIds.length} resume{selectedIds.length !== 1 ? "s" : ""} will be screened against the job description.
                 </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  This costs {totalCost} credit{totalCost === 1 ? "" : "s"} ({perResume} per resume)
+                  {creditBalance !== null && <> · you have {creditBalance}</>}. Resumes that fail are
+                  refunded.
+                </p>
+                {notEnoughCredits && (
+                  <p className="mt-2 text-sm text-destructive">
+                    You don&apos;t have enough credits to screen this many resumes. Deselect some
+                    and try again.
+                  </p>
+                )}
                 <div className="mt-6 flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setCurrentStep(2)} className="gap-1">
                     <ArrowLeft className="h-4 w-4" /> Back
                   </Button>
                   <Button
                     onClick={startScreening}
+                    disabled={notEnoughCredits}
                     className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
                   >
                     <ScanSearch className="h-4 w-4" /> Start Screening
@@ -377,8 +348,8 @@ export function ScreenStepper() {
         )}
 
         {/* Step 4: Results */}
-        {currentStep === 4 && (
-          <ScreenResults items={results} onReset={reset} />
+        {currentStep === 4 && result && (
+          <ScreenResults result={result} onReset={reset} />
         )}
       </div>
     </div>

@@ -17,11 +17,12 @@ const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3.0;
 
 interface PdfViewerProps {
-  base64: string;
+  /** The PDF bytes, e.g. from `api.resumes.file(id)`. Keep the reference stable between renders. */
+  file: Blob;
   fileName?: string;
 }
 
-export function PdfViewer({ base64, fileName = "document.pdf" }: PdfViewerProps) {
+export function PdfViewer({ file, fileName = "document.pdf" }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -45,11 +46,7 @@ export function PdfViewer({ base64, fileName = "document.pdf" }: PdfViewerProps)
   }, []);
 
   function handleDownload() {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: "application/pdf" });
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(file);
     const a = document.createElement("a");
     a.href = url;
     a.download = fileName;
@@ -141,7 +138,7 @@ export function PdfViewer({ base64, fileName = "document.pdf" }: PdfViewerProps)
           </div>
         )}
         <Document
-          file={`data:application/pdf;base64,${base64}`}
+          file={file}
           onLoadSuccess={({ numPages }) => {
             setNumPages(numPages);
             setLoading(false);

@@ -4,7 +4,7 @@ FastAPI service that replaces the n8n workflows. The API surface is complete (ph
 foundation (config, auth, database + Alembic, object storage, credits), the documents pipeline
 (resume and job description upload, validation gate, OCR, scraping, background jobs with live
 progress), and matching, screening, tailored bullets, cover letters, overview, credits, data
-export and account erase. The frontend is wired to it in phase 4.
+export and account erase. The Next.js frontend calls it directly (phase 4).
 
 The full machine-readable contract is [`openapi.json`](openapi.json) (regenerate with
 `uv run python dev/export_openapi.py`; a test fails when it is stale). Request/response shapes,
@@ -57,7 +57,10 @@ uv run pytest                                     # DB tests skip if the dev Pos
 ```
 
 Authenticated calls need a Better Auth JWT; point `AUTH_JWKS_URL` / `AUTH_ISSUER` at the running
-Next.js app (e.g. `http://127.0.0.1:3000`) once phase 4 adds the `jwt()` plugin.
+Next.js app (e.g. `http://127.0.0.1:3000`), which runs Better Auth's `jwt()` plugin. Also set
+`CORS_ORIGINS=http://127.0.0.1:3000` and `INTERNAL_API_KEY` (shared with the frontend's
+`INTERNAL_API_KEY`, used by account deletion). To run the whole stack without AI keys:
+`DEV_REAL_AUTH=1 uv run python dev/dev_server.py` (real sign-in, fake OpenAI/Firecrawl).
 
 Until then, `dev/dev_server.py` runs the real app with a throwaway signing key, prints a dev JWT,
 and by default replaces only the OpenAI and Firecrawl network calls with fakes (no keys needed):

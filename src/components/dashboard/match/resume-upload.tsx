@@ -5,35 +5,44 @@ import { Upload, FileText, X, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { ResumeRecord } from "@/types/n8n";
-import { ShimmeringProgressDialog, type ProgressStep } from "@/components/dashboard/shimmering-progress-dialog";
-
-const RESUME_STEPS: ProgressStep[] = [
-  { message: "Analyzing Resume...", duration: 5000 },
-  { message: "Extracting Details...", duration: 5000 },
-  { message: "Almost there...", duration: Infinity },
-];
+import { api, isApiError, waitForJob } from "@/lib/api/client";
+import { describeError } from "@/lib/api/errors";
+import {
+  MAX_RESUME_PAGES,
+  MAX_UPLOAD_MB,
+  RESUME_ACCEPT,
+  RESUME_FORMATS_LABEL,
+  checkResumeFile,
+} from "@/lib/api/limits";
+import type { JobStep, Mode, ResumeJobResult, ResumeOut } from "@/lib/api/types";
+import { useDashboardData } from "@/contexts/dashboard-data";
+import { ShimmeringProgressDialog } from "@/components/dashboard/shimmering-progress-dialog";
 
 interface ResumeUploadProps {
-  onUploaded: (resume: ResumeRecord) => void;
+  onUploaded: (resume: ResumeOut) => void;
   onCancel?: () => void;
-  isCandidate?: boolean;
+  /** `candidate` for Job Fit, `recruiter` for the Resume Screener. */
+  mode?: Mode;
   buttonLabel?: string;
 }
 
-export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonLabel = "Process resume" }: ResumeUploadProps) {
+export function ResumeUpload({
+  onUploaded,
+  onCancel,
+  mode = "candidate",
+  buttonLabel = "Process resume",
+}: ResumeUploadProps) {
+  const { addResume } = useDashboardData();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [steps, setSteps] = useState<JobStep[]>([]);
   const [dragging, setDragging] = useState(false);
 
   function handleFile(f: File) {
-    if (f.type !== "application/pdf") {
-      toast.error("Only PDF files are supported.");
-      return;
-    }
-    if (f.size > 10 * 1024 * 1024) {
-      toast.error("File size must be under 10 MB.");
+    const problem = checkResumeFile(f);
+    if (problem) {
+      toast.error(problem);
       return;
     }
     setFile(f);
@@ -49,25 +58,25 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
   async function upload() {
     if (!file) return;
     setUploading(true);
+    setSteps([]);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const url = `/api/resume/upload?is_candidate=${isCandidate}`;
-      const res = await fetch(url, { method: "POST", body: fd });
-      if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.error ?? "Upload failed.");
-      }
-      const data = await res.json();
+      const { job_id } = await api.resumes.upload(file, mode);
+      const result = await waitForJob<ResumeJobResult>(job_id, { onSteps: setSteps });
+      addResume(result.resume);
       toast.success("Resume uploaded successfully.");
-      onUploaded({
-        file_id: data.file_id,
-        file_name: data.file_name || file.name,
-        file_size: file.size,
-        file_base64: "",
-      });
+      onUploaded(result.resume);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload failed. Please try again.");
+      if (isApiError(err, "DUPLICATE_RESUME")) {
+        // Same file already stored for this tool: use that copy instead of failing.
+        const existing = await findExisting(err.details?.resume_id);
+        if (existing) {
+          addResume(existing);
+          toast.info("You've already uploaded this file. Using the existing copy.");
+          onUploaded(existing);
+          return;
+        }
+      }
+      toast.error(describeError(err, "Upload failed. Please try again."));
     } finally {
       setUploading(false);
     }
@@ -75,7 +84,7 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
 
   return (
     <>
-    <ShimmeringProgressDialog open={uploading} title="Processing Resume" steps={RESUME_STEPS} />
+    <ShimmeringProgressDialog open={uploading} title="Processing Resume" steps={steps} />
     <div className="space-y-4">
       {!file ? (
         <div
@@ -91,14 +100,20 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
           onDrop={onDrop}
         >
           <Upload className="mb-3 h-8 w-8 text-muted-foreground" />
-          <p className="text-sm font-medium">Drop your PDF here or click to browse</p>
-          <p className="mt-1 text-xs text-muted-foreground">PDF only · max 10 MB</p>
+          <p className="text-sm font-medium">Drop your resume here or click to browse</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {RESUME_FORMATS_LABEL} · max {MAX_UPLOAD_MB} MB · up to {MAX_RESUME_PAGES} pages
+          </p>
           <input
             ref={inputRef}
             type="file"
-            accept=".pdf,application/pdf"
+            accept={RESUME_ACCEPT}
             className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+              e.target.value = ""; // allow re-picking the same file after a rejection
+            }}
           />
         </div>
       ) : (
@@ -112,6 +127,7 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
           </div>
           <button
             onClick={() => setFile(null)}
+            aria-label="Remove file"
             className="ml-2 rounded-sm text-muted-foreground hover:text-foreground"
           >
             <X className="h-4 w-4" />
@@ -138,4 +154,13 @@ export function ResumeUpload({ onUploaded, onCancel, isCandidate = true, buttonL
     </div>
     </>
   );
+}
+
+async function findExisting(id: unknown): Promise<ResumeOut | null> {
+  if (typeof id !== "string") return null;
+  try {
+    return (await api.resumes.list()).find((r) => r.id === id) ?? null;
+  } catch {
+    return null;
+  }
 }

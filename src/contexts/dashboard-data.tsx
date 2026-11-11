@@ -2,131 +2,152 @@
 
 import {
   createContext,
-  useContext,
-  useState,
-  useEffect,
   useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
   type ReactNode,
 } from "react";
+import { api, isAbortError } from "@/lib/api/client";
+import { describeError } from "@/lib/api/errors";
 import type {
-  UserAnalyticsResponse,
-  JobMatchSummary,
+  CreditsOut,
   CreditTransaction,
-  ResumeRecord,
-  JdRecord,
-  UserDataResponse,
-} from "@/types/n8n";
+  JobDescriptionOut,
+  MatchListItem,
+  OverviewOut,
+  ResumeOut,
+} from "@/lib/api/types";
+
+/** Ledger rows kept in memory for the Credits tab. */
+const LEDGER_LIMIT = 200;
 
 interface DashboardDataContextType {
-  analytics: UserAnalyticsResponse | null;
-  matches: JobMatchSummary[] | null;
-  resumes: ResumeRecord[] | null;
-  jds: JdRecord[] | null;
+  overview: OverviewOut | null;
+  matches: MatchListItem[] | null;
+  resumes: ResumeOut[] | null;
+  jds: JobDescriptionOut[] | null;
+  /** Balance plus what each action costs (never hardcode prices in the UI). */
+  credits: CreditsOut | null;
   creditBalance: number | null;
   creditHistory: CreditTransaction[] | null;
   loading: boolean;
+  /** Set when the last load failed (data shown, if any, may be stale). */
+  error: string | null;
+  /** Everything: after a match, a screening, a delete. */
   refreshAll: () => Promise<void>;
+  /** Balance and ledger only. */
+  refreshCredits: () => Promise<void>;
+  /** Show a just-uploaded resume immediately, before the next refetch. */
+  addResume: (resume: ResumeOut) => void;
+  /** Drop a deleted match from the lists immediately. */
+  removeMatch: (id: string) => void;
 }
 
-const DashboardDataContext = createContext<DashboardDataContextType | null>(
-  null
-);
-
-function applyUserData(
-  data: UserDataResponse,
-  setters: {
-    setAnalytics: (v: UserAnalyticsResponse) => void;
-    setMatches: (v: JobMatchSummary[]) => void;
-    setResumes: (v: ResumeRecord[]) => void;
-    setJds: (v: JdRecord[]) => void;
-    setCreditBalance: (v: number) => void;
-    setCreditHistory: (v: CreditTransaction[]) => void;
-  }
-) {
-  setters.setAnalytics(data.user_analytics);
-  setters.setMatches(Array.isArray(data.job_match_summary) ? data.job_match_summary : []);
-  setters.setResumes(Array.isArray(data.resumes) ? data.resumes : []);
-  setters.setJds(Array.isArray(data.jds) ? data.jds : []);
-  setters.setCreditBalance(data.remaining_credit ?? 0);
-  setters.setCreditHistory(Array.isArray(data.credit_history) ? data.credit_history : []);
-}
+const DashboardDataContext = createContext<DashboardDataContextType | null>(null);
 
 export function DashboardDataProvider({ children }: { children: ReactNode }) {
-  const [analytics, setAnalytics] = useState<UserAnalyticsResponse | null>(null);
-  const [matches, setMatches] = useState<JobMatchSummary[] | null>(null);
-  const [resumes, setResumes] = useState<ResumeRecord[] | null>(null);
-  const [jds, setJds] = useState<JdRecord[] | null>(null);
-  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [overview, setOverview] = useState<OverviewOut | null>(null);
+  const [matches, setMatches] = useState<MatchListItem[] | null>(null);
+  const [resumes, setResumes] = useState<ResumeOut[] | null>(null);
+  const [jds, setJds] = useState<JobDescriptionOut[] | null>(null);
+  const [credits, setCredits] = useState<CreditsOut | null>(null);
   const [creditHistory, setCreditHistory] = useState<CreditTransaction[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const setters = { setAnalytics, setMatches, setResumes, setJds, setCreditBalance, setCreditHistory };
-
-  // Initial fetch on mount (AbortController handles React 18 Strict Mode)
+  const mounted = useRef(true);
   useEffect(() => {
-    const controller = new AbortController();
-    const signal = controller.signal;
-
-    async function load() {
-      try {
-        const res = await fetch("/api/user-data", { signal });
-        if (signal.aborted) return;
-        if (res.ok) {
-          const data: UserDataResponse = await res.json();
-          applyUserData(data, setters);
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-      } finally {
-        if (!signal.aborted) setLoading(false);
-      }
-    }
-
-    load();
-    return () => controller.abort();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
   }, []);
 
-  // New-user retry: if credits are still 0 after initial load, the signup
-  // webhook may not have finished yet. Retry once after a short delay.
-  useEffect(() => {
-    if (loading || creditBalance === null || creditBalance > 0) return;
-
-    const timer = setTimeout(() => {
-      refreshAll();
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, creditBalance]);
-
-  // Full refresh — called after Job Fit / Resume Screening / uploads complete
   const refreshAll = useCallback(async () => {
-    try {
-      const res = await fetch("/api/user-data");
-      if (res.ok) {
-        const data: UserDataResponse = await res.json();
-        applyUserData(data, setters);
-      }
-    } catch {
-      // fail silently
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const results = await Promise.allSettled([
+      api.overview(),
+      api.credits(),
+      api.creditTransactions(LEDGER_LIMIT),
+      api.matches.list(),
+      api.resumes.list(),
+      api.jobDescriptions.list(),
+    ]);
+    if (!mounted.current) return;
+
+    const [ov, cr, tx, ms, rs, js] = results;
+    if (ov.status === "fulfilled") setOverview(ov.value);
+    if (cr.status === "fulfilled") setCredits(cr.value);
+    if (tx.status === "fulfilled") setCreditHistory(tx.value);
+    if (ms.status === "fulfilled") setMatches(ms.value);
+    if (rs.status === "fulfilled") setResumes(rs.value);
+    if (js.status === "fulfilled") setJds(js.value);
+
+    const failed = results.find(
+      (r): r is PromiseRejectedResult => r.status === "rejected" && !isAbortError(r.reason)
+    );
+    setError(failed ? describeError(failed.reason, "Could not load your data.") : null);
+    setLoading(false);
   }, []);
+
+  const refreshCredits = useCallback(async () => {
+    const [cr, tx] = await Promise.allSettled([
+      api.credits(),
+      api.creditTransactions(LEDGER_LIMIT),
+    ]);
+    if (!mounted.current) return;
+    if (cr.status === "fulfilled") setCredits(cr.value);
+    if (tx.status === "fulfilled") setCreditHistory(tx.value);
+  }, []);
+
+  useEffect(() => {
+    refreshAll();
+  }, [refreshAll]);
+
+  const addResume = useCallback((resume: ResumeOut) => {
+    setResumes((prev) => [resume, ...(prev ?? []).filter((r) => r.id !== resume.id)]);
+  }, []);
+
+  const removeMatch = useCallback((id: string) => {
+    setMatches((prev) => prev?.filter((m) => m.id !== id) ?? prev);
+  }, []);
+
+  const value = useMemo<DashboardDataContextType>(
+    () => ({
+      overview,
+      matches,
+      resumes,
+      jds,
+      credits,
+      creditBalance: credits?.balance ?? null,
+      creditHistory,
+      loading,
+      error,
+      refreshAll,
+      refreshCredits,
+      addResume,
+      removeMatch,
+    }),
+    [
+      overview,
+      matches,
+      resumes,
+      jds,
+      credits,
+      creditHistory,
+      loading,
+      error,
+      refreshAll,
+      refreshCredits,
+      addResume,
+      removeMatch,
+    ]
+  );
 
   return (
-    <DashboardDataContext.Provider
-      value={{
-        analytics,
-        matches,
-        resumes,
-        jds,
-        creditBalance,
-        creditHistory,
-        loading,
-        refreshAll,
-      }}
-    >
+    <DashboardDataContext.Provider value={value}>
       {children}
     </DashboardDataContext.Provider>
   );
@@ -135,8 +156,6 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
 export function useDashboardData() {
   const ctx = useContext(DashboardDataContext);
   if (!ctx)
-    throw new Error(
-      "useDashboardData must be used within DashboardDataProvider"
-    );
+    throw new Error("useDashboardData must be used within DashboardDataProvider");
   return ctx;
 }

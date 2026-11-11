@@ -3,6 +3,7 @@
     cd backend
     uv run python dev/dev_server.py            # fake OpenAI + Firecrawl (no keys needed)
     DEV_REAL_AI=1 uv run python dev/dev_server.py   # real OpenAI/Firecrawl from backend/.env
+    DEV_REAL_AUTH=1 uv run python dev/dev_server.py # real Better Auth JWTs (frontend running)
 
 It serves the real FastAPI app over real HTTP (so multipart streaming and SSE behave as in
 production) with ``get_key_store`` replaced by a generated Ed25519 key, and prints a dev JWT
@@ -35,8 +36,14 @@ KID = "dev-key"
 USER = os.environ.get("DEV_USER", "dev-user")
 PORT = int(os.environ.get("PORT", "8000"))
 
-os.environ.setdefault("AUTH_ISSUER", ISSUER)
-os.environ.setdefault("CORS_ORIGINS", "http://127.0.0.1:3000")
+# DEV_REAL_AUTH=1: verify real Better Auth JWTs against the running Next.js app's JWKS
+# (AUTH_JWKS_URL / AUTH_ISSUER / CORS_ORIGINS / INTERNAL_API_KEY come from backend/.env).
+# Used for the phase 4 end-to-end run: real sign-in, fake AI.
+REAL_AUTH = bool(os.environ.get("DEV_REAL_AUTH"))
+
+if not REAL_AUTH:
+    os.environ.setdefault("AUTH_ISSUER", ISSUER)
+    os.environ.setdefault("CORS_ORIGINS", "http://127.0.0.1:3000")
 
 from app.auth import StaticKeyStore, get_key_store  # noqa: E402
 from app.main import create_app  # noqa: E402
@@ -76,7 +83,8 @@ class SlowFakeFirecrawl(FakeFirecrawl):
 def build() -> Any:
     key = Ed25519PrivateKey.generate()
     app = create_app()
-    app.dependency_overrides[get_key_store] = lambda: StaticKeyStore({KID: key.public_key()})
+    if not REAL_AUTH:
+        app.dependency_overrides[get_key_store] = lambda: StaticKeyStore({KID: key.public_key()})
     if not os.environ.get("DEV_REAL_AI"):
         delay = float(os.environ.get("DEV_FAKE_DELAY", "0.6"))
         llm, firecrawl = SlowFakeLLM(delay), SlowFakeFirecrawl(delay)
@@ -85,6 +93,10 @@ def build() -> Any:
         print("AI: FAKE (set DEV_REAL_AI=1 to use OpenAI/Firecrawl from backend/.env)")
     else:
         print("AI: REAL")
+
+    if REAL_AUTH:
+        print("AUTH: REAL (JWKS from AUTH_JWKS_URL); no dev JWT printed", flush=True)
+        return app
 
     now = int(time.time())
     token = jwt.encode(

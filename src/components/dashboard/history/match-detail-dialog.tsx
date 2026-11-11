@@ -1,12 +1,17 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import { api } from "@/lib/api/client";
+import { describeError } from "@/lib/api/errors";
+import { useDashboardData } from "@/contexts/dashboard-data";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,10 +29,11 @@ import {
 } from "lucide-react";
 import { ScoreRing } from "@/components/dashboard/match/score-ring";
 import { cn } from "@/lib/utils";
-import type { JobMatchSummary } from "@/types/n8n";
+import type { MatchOut } from "@/lib/api/types";
 
 interface MatchDetailDialogProps {
-  match: JobMatchSummary | null;
+  /** The match to show; its full report is fetched when this changes. */
+  matchId: string | null;
   onClose: () => void;
 }
 
@@ -100,16 +106,73 @@ function CollapsibleSection({
   );
 }
 
-export function MatchDetailDialog({ match, onClose }: MatchDetailDialogProps) {
+/** Loads the full report (the history list only carries summaries), then shows it. */
+export function MatchDetailDialog({ matchId, onClose }: MatchDetailDialogProps) {
+  const [loaded, setLoaded] = useState<MatchOut | null>(null);
+
+  useEffect(() => {
+    if (!matchId) return;
+    const controller = new AbortController();
+    api.matches
+      .get(matchId, controller.signal)
+      .then((m) => {
+        if (!controller.signal.aborted) setLoaded(m);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        toast.error(describeError(err, "Could not load this report."));
+        onClose();
+      });
+    return () => {
+      controller.abort();
+      setLoaded(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchId]);
+
+  if (!matchId) return null;
+
+  if (!loaded || loaded.id !== matchId) {
+    return (
+      <Dialog open onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Match Report</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2" aria-busy="true">
+            <Skeleton className="mx-auto h-24 w-24 rounded-full" />
+            <Skeleton className="h-24 w-full rounded-lg" />
+            <Skeleton className="h-24 w-full rounded-lg" />
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return <MatchReportView match={loaded} onClose={onClose} />;
+}
+
+function MatchReportView({
+  match,
+  onClose,
+}: {
+  match: MatchOut;
+  onClose: () => void;
+}) {
   const printRef = useRef<HTMLDivElement>(null);
+  const { jds } = useDashboardData();
 
-  if (!match) return null;
-
-  const ms = match.job_match_summary?.match_summary;
-  const ats = match.job_match_summary?.ats_optimization;
-  const detailed = match.job_match_summary?.detailed_analysis;
-  const improvements = match.job_match_summary?.improvement_suggestions;
-  const jd = match.job_description;
+  const ms = match.report?.match_summary;
+  const ats = match.report?.ats_optimization;
+  const detailed = match.report?.detailed_analysis;
+  const improvements = match.report?.improvement_suggestions;
+  const fileName = match.resume_file_name ?? "Unknown";
+  const jd = {
+    company_name: match.company_name ?? undefined,
+    job_title: match.job_title ?? undefined,
+    // The list endpoint doesn't carry the location; the job description list does.
+    location: jds?.find((j) => j.id === match.jd_id)?.jd_object?.location,
+  };
   const score = ms?.overall_score_percent ?? 0;
   const confidence = ms?.score_confidence ?? "unknown";
 
@@ -120,7 +183,7 @@ export function MatchDetailDialog({ match, onClose }: MatchDetailDialogProps) {
     if (!printWindow) return;
     printWindow.document.write(`
       <!DOCTYPE html>
-      <html><head><title>Match Report - ${match!.file_name ?? match!.file_id ?? "Report"}</title>
+      <html><head><title>Match Report - ${fileName}</title>
       <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; color: #1a1a1a; font-size: 13px; line-height: 1.5; }
@@ -143,7 +206,7 @@ export function MatchDetailDialog({ match, onClose }: MatchDetailDialogProps) {
       </style></head><body>
     `);
     printWindow.document.write(`<h1>Match Report</h1>`);
-    printWindow.document.write(`<p class="meta">${match!.file_name ?? match!.file_id ?? "Unknown"}</p>`);
+    printWindow.document.write(`<p class="meta">${fileName}</p>`);
 
     // Job info
     if (jd && (jd.company_name || jd.job_title)) {
@@ -257,7 +320,7 @@ export function MatchDetailDialog({ match, onClose }: MatchDetailDialogProps) {
   }
 
   return (
-    <Dialog open={!!match} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center justify-between">
@@ -275,7 +338,7 @@ export function MatchDetailDialog({ match, onClose }: MatchDetailDialogProps) {
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            {match.file_name ?? match.file_id ?? "Unknown"}
+            {fileName}
           </p>
         </DialogHeader>
 
@@ -592,7 +655,7 @@ export function MatchDetailDialog({ match, onClose }: MatchDetailDialogProps) {
 function SuggestionCard({
   item,
 }: {
-  item: { suggestion: string; effort_required: string; expected_impact: string; example_phrasing: string };
+  item: { suggestion: string; effort_required: string; expected_impact: string; example_phrasing?: string | null };
 }) {
   return (
     <div className="rounded-md border border-border p-3 space-y-1.5">

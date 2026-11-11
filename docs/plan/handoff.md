@@ -9,7 +9,7 @@ Each session appends one section when it finishes. Read the whole file at the st
 | 1 Backend foundation + DB | Done (2026-11-11) | `phase-1-backend-foundation` | see `git log` on branch |
 | 2 Documents pipeline | Done (2026-11-11) | `phase-2-backend-documents` (stacked on `phase-1-backend-foundation`) | see `git log` on branch |
 | 3 Matching + account | Done (2026-11-11) | `phase-3-backend-matching` (stacked on `phase-2-backend-documents`) | see `git log` on branch |
-| 4 Frontend data layer | Not started | | |
+| 4 Frontend data layer | Done (2026-11-11) | `phase-4-frontend-data-layer` (stacked on `phase-3-backend-matching`) | see `git log` on branch |
 | 5 Design system + marketing | Not started | | |
 | 6 Dashboard redesign | Not started | | |
 | 7 Local E2E verification | Not started | | |
@@ -274,3 +274,76 @@ Phase 2's exit criteria were re-verified first: dev Postgres up, `alembic upgrad
 ### Next session starting point
 - Phase 4; first thing to do: `cd backend && docker compose -f docker-compose.dev.yml up -d && uv sync && uv run pytest` (expect 351 passed, 1 skipped), read `backend/openapi.json` and the "API contract" sections of phases 2 and 3 above, then add the `jwt()` plugin (include `email`), the `beforeDelete` hook calling `DELETE /internal/users/{id}`, the typed client + SSE reader, and delete the n8n code. Use `uv run python dev/dev_server.py` as the backend while building (fake AI, prints a JWT; but Phase 4 needs the real JWKS flow, so point `AUTH_JWKS_URL` / `AUTH_ISSUER` at the Next.js app).
 - Must not break: the `{code,message,details}` error shape, the SSE format, `202 {job_id}` for long work, credit reservation inside `submit(setup=)` with refunds only via `services/reservations.py`, ownership-as-404, settings-only configuration, `openapi.json` kept current (a test enforces it), and nothing runs against the production DB before phase 8.
+
+## Phase 4: Frontend data layer (done 2026-11-11, branch phase-4-frontend-data-layer)
+
+Phase 3's exit criteria were re-verified first: dev Postgres up, `uv run pytest` = **351 passed, 1 skipped** exactly as recorded, `backend/openapi.json` present, git clean on `phase-3-backend-matching`. No gap. This branch is stacked on it.
+
+### Built
+- **Auth** (`src/lib/auth.ts`): `jwt()` plugin (EdDSA, `issuer` = `audience` = `BETTER_AUTH_URL`, payload reduced to `{email}` + `sub`), `signupCredits` hook removed, `user.deleteUser` enabled with a `beforeDelete` that calls `DELETE {API_INTERNAL_URL}/internal/users/{id}` (`X-Internal-Key`, body `{email}`) and throws a Better Auth `APIError` (502 / 503) on any failure, so nothing is deleted unless the backend erased first. `auth-client.ts`: `jwtClient()`, `getApiToken()` (cached JWT, refreshed 60 s before expiry, shared in-flight request, generation counter so a fetch started before sign-out can't repopulate the cache), `clearApiToken()`, `signOut` wrapped to clear it.
+- **API layer** `src/lib/api/`: `client.ts` (typed `api.*` for every endpoint the UI needs, `ApiError`, one token refresh + retry on 401, fetch-based SSE reader, `waitForJob<T>()` with polling fallback), `types.ts` (from `openapi.json`, match report types kept), `errors.ts` (`describeError`: 402 shows "You need N credits for this but have M", job/LLM/scrape/limit codes get specific text), `limits.ts` (UI-side upload limits).
+- **Dashboard** rewired: `contexts/dashboard-data.tsx` (overview, credits + prices, ledger, matches, resumes, JDs), overview page, history table (+ new `resume-preview-dialog.tsx`: PDF fetched on demand from `/v1/resumes/{id}/file`, DOCX/TXT download-only), match stepper, screen stepper, resume upload, both pickers (now list existing resumes, filtered by mode), results components, credits section, report dialog (fetches `GET /v1/matches/{id}` when opened), `pdf-viewer.tsx` (now takes a `Blob`).
+- **Progress**: `ShimmeringProgressDialog` is now driven by real job steps instead of timers (all five uses: resume upload, JD x2, match, screening).
+- **Removed**: `src/lib/n8n*.ts`, `refresh-credits.ts`, `src/types/n8n.ts`, API routes `resume/*`, `jd/*`, `match/*`, `analytics`, `credits/*`, `user-data`, plus the dead `jd-input.tsx` and `credit-badge.tsx`. `grep -ri n8n src` now matches only `src/app/api/contact/route.ts`.
+- **Env/docs**: `.env.example` (new vars, N8N reduced to `N8N_API_KEY`), `CLAUDE.md` (architecture, run-both-apps commands, env, dev setup), `README.md`, `backend/README.md`, `backend/dev/dev_server.py` (`DEV_REAL_AUTH=1`), `scripts/e2e/` (the verification scripts below).
+
+### Files created / changed (key ones)
+- New: `src/lib/api/{client,types,errors,limits}.ts`, `src/components/dashboard/history/resume-preview-dialog.tsx`, `scripts/e2e/*`.
+- Changed: `src/lib/{auth,auth-client}.ts`, `src/contexts/dashboard-data.tsx`, `src/app/(dashboard)/dashboard/{page,history/page}.tsx`, `src/components/dashboard/{history,match,screen,settings}/*`, `shimmering-progress-dialog.tsx`, `src/components/pdf-viewer.tsx`, `src/app/(marketing)/privacy/page.tsx` (one sentence), `.env.example`, `.gitignore`, `CLAUDE.md`, `README.md`.
+
+### Behaviour the UI now respects
+- **Match = 1 credit** (price read from `GET /v1/credits`, never hardcoded). The analyze step states the cost and balance and disables the button when the balance is too short; a server `402 INSUFFICIENT_CREDITS` shows its own message. After any match/screening the balance and history are refetched (also on failure, since a refund changes them).
+- **Screening**: all-or-nothing credit check up front (cost shown), up to 20 resumes, failed items listed with their reason and the refunded amount.
+- **Delete match** keeps resume and JD (confirm text says so and that the credit isn't returned).
+- **Modes**: Job Fit lists/uploads `candidate` resumes and JDs, the Screener `recruiter` ones. Dedup is per mode, so a `409 DUPLICATE_RESUME` / `DUPLICATE_JD` is handled by reusing the existing item (toast says so).
+- Upload area states "PDF, DOCX or TXT · max 5 MB · up to 5 pages"; files are pre-checked in the browser; server rejections (page limit, text limit, invalid document, scanned-but-unreadable, ...) show the backend's specific message.
+
+### Deviations from the plan (and why)
+- **Separate local DB for Better Auth.** The repo-root `.env.local` holds the **production** `DATABASE_URL`, so there was no "dev" Better Auth DB. The Better Auth tables + `jwks` were created in the local docker Postgres (`resumatch_dev`, same DB the backend uses) with `DATABASE_URL` passed explicitly to `npx @better-auth/cli@latest migrate` (never in `.env.local`'s reach). Dev values live in a gitignored `.env.development.local` (Next loads it after `.env.local` for `next dev`, so production values can't leak into a dev run; verified with `@next/env`). **Production has no `jwks` table yet**: Phase 8 must run the migration there.
+- **`jwtClient() as never`** in `auth-client.ts`: better-auth 1.6.24's `jwtClient().getActions` type is rejected by `createAuthClient`, and that rejection also erases other plugins' typings (`emailOtp` stopped existing). Runtime is fine. The token is read with `authClient.$fetch("/token")` (no plugin typings needed). Drop the cast when the library is fixed.
+- **JWT payload is `{email}` + `sub`**, not the whole user row (the default). The plan only requires `email`.
+- **Deleted `credit-badge.tsx` and `jd-input.tsx` now** (the plan lists them for Phase 6): both imported modules deleted in this phase and nothing used them.
+- **Privacy page**: changed the one sentence that said n8n runs the AI pipeline (it would now be false, and the exit criterion greps n8n). Other stale claims there (Clerk, "processed in memory and not persisted") are untouched: Phase 5.
+- **Retry bug fixed on the way**: the old "Retry" after a failed JD in the match stepper set state to the value it already had, so it did nothing. It now restarts the job.
+- Overview stat labels renamed to what the API counts ("Resumes", "Job Descriptions", "Analyses"); the empty-state badge now says "1 credit per analysis · uploads are free".
+- `ShimmeringProgressDialog` got a `DialogTitle` (sr-only): it was a Radix console error on every open.
+- Credits ledger in the context is capped at the 200 newest rows (`LEDGER_LIMIT`); the JD list is fetched with `limit=500` (the API's maximum) because its default would silently cap at 100.
+- `api.matches.tailoredBullets/coverLetter` exist in the client (typed) but no UI calls them yet; there is no `api.account.export` yet. Phase 6 wires/adds them.
+- Backend: only `dev/dev_server.py` changed (`DEV_REAL_AUTH=1`: real JWKS verification instead of the throwaway key; `AUTH_ISSUER`/`CORS_ORIGINS` then come from `backend/.env`). No API or schema change, so `openapi.json` and the 351 backend tests are unaffected.
+
+### New commands / env vars / ports
+- **Run everything locally** (exact):
+  1. `cd backend && docker compose -f docker-compose.dev.yml up -d && uv sync && uv run alembic upgrade head`
+  2. Once: create `backend/.env` (`AUTH_JWKS_URL=http://127.0.0.1:3000/api/auth/jwks`, `AUTH_ISSUER=http://127.0.0.1:3000`, `CORS_ORIGINS=http://127.0.0.1:3000`, `INTERNAL_API_KEY=<x>`) and root `.env.development.local` (`DATABASE_URL=postgresql://resumatch:resumatch@127.0.0.1:5433/resumatch_dev`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=http://127.0.0.1:3000`, `NEXT_PUBLIC_API_URL=http://127.0.0.1:8000`, `API_INTERNAL_URL=http://127.0.0.1:8000`, `INTERNAL_API_KEY=<x>`, `RESEND_API_KEY=<dummy>`). Then `DATABASE_URL=postgresql://resumatch:resumatch@127.0.0.1:5433/resumatch_dev BETTER_AUTH_SECRET=<same> BETTER_AUTH_URL=http://127.0.0.1:3000 RESEND_API_KEY=<dummy> npx @better-auth/cli@latest migrate -y`.
+  3. Backend: `cd backend && uv run uvicorn app.main:app --reload` (real AI; needs `OPENAI_API_KEY` + `FIRECRAWL_API_KEY` in `backend/.env`) **or** `DEV_REAL_AUTH=1 uv run python dev/dev_server.py` (fake AI, real sign-in; `DEV_FAKE_DELAY=<s>` slows the fake calls).
+  4. Frontend: `npm run dev`, open **http://127.0.0.1:3000**.
+  5. Dev users can't receive the OTP email (dummy Resend key on purpose): sign up, then `update resume_match."user" set "emailVerified" = true where email = '…'` in the dev DB, then sign in.
+- New env vars (frontend): `NEXT_PUBLIC_API_URL` (**build-time**), `API_INTERNAL_URL`, `INTERNAL_API_KEY` (runtime, must equal the backend's). Dropped: `N8N_WEBHOOK_BASE_URL`, `N8N_*_WEBHOOK_ID`. Kept: `N8N_API_KEY` (contact form). `BETTER_AUTH_URL` must equal the backend's `AUTH_ISSUER` exactly.
+- No new npm dependencies.
+
+### Verification run (commands + result, including failures)
+- `npx tsc --noEmit`: clean. `npm run build`: passes (22 routes; no api routes except auth + contact).
+- `grep -ri n8n src`: only `src/app/api/contact/route.ts`.
+- **Real stack, mocked AI**: Next.js dev server (127.0.0.1:3000, local dev Postgres) + `DEV_REAL_AUTH=1` backend (**fake OpenAI/Firecrawl; no real LLM or scrape was called**). `scripts/e2e/e2e-ui.mjs` (headless Chrome, real pages), **all 29 checks pass**: UI sign-in, new user shows 10 credits, upload area states limits, a >5 MB file is refused in the browser, a 6-page PDF is refused by the server with "This document has 6 pages; the limit is 5.", upload via job + SSE, JD by pasted text, cost/balance stated, match completes and credits go 10 -> 9, history row + View Report loads the full report on demand, PDF preview renders from `/v1/resumes/{id}/file`, delete match -> **resume and JD rows survive, match row gone (checked in SQL)**, picker lists the existing resume, duplicate upload reuses the existing copy, ledger shows `+10` and `-1`, screener doesn't list candidate-mode resumes, 3-resume screening ranked and credits 9 -> 6, screener history tab lists 3, balance forced to 0 -> analyze button disabled with the "not enough credits" message. Three of the screenshots (upload progress, history, screening results) were looked at and render correctly.
+- `scripts/e2e/e2e-delete.mjs`, **all 18 checks pass**: JWT is EdDSA with `iss` = `aud` = `BETTER_AUTH_URL`, claims only `sub`/`email`/`iat`/`exp`/`iss`/`aud`; backend accepts it (lazy account = 10 credits), rejects no token and a tampered token; with the backend **stopped**, `POST /api/auth/delete-user` returns 502 and the user, session and resume are intact; with it running, deletion returns 200, **zero rows in all 6 tables with `user_id`**, no objects left, Better Auth user/sessions gone, sign-in returns 401, re-registering the same email gives **0 credits**.
+- `scripts/e2e/e2e-sse.mjs`: only `/v1/jobs/{id}/events` was requested (no polling) and the dialog showed the backend's live label "Checking that it's a resume". (Its second regex demanded the instant "Reading your file" step, which can't be observed: a flaw in that check, not the app. Noted in the script's README.)
+- Backend suite not re-run after the end (only `dev/dev_server.py` changed, which no test imports); it was 351 passed / 1 skipped at the start.
+- **Not run**: real OpenAI / Firecrawl / MinIO, the production DB, Google sign-in, a real OTP email, the SSE **polling fallback** and the 401-refresh-retry path (written, not exercised), a visual pass in dark mode / mobile widths (Phase 7).
+
+### Temporary UI that Phase 6 replaces
+- `shimmering-progress-dialog.tsx` (unclosable modal, now live): used by `resume-upload.tsx`, `match-stepper.tsx` (JD + analyze), `screen-stepper.tsx` (JD + screening). Phase 6: inline step list.
+- `match-results.tsx` and `history/match-detail-dialog.tsx` are still near-duplicates (both now take `MatchOut`); `handlePrint` still builds HTML with `document.write` from **unescaped report text** (pre-existing; the report text comes from model output, so it is a real injection path). Phase 6's print stylesheet removes it.
+- Screener results show rank/score/rationale only; no drill-down yet (a ranked row has `match_id`, so `GET /v1/matches/{id}` is ready).
+- Settings "Account" tab is still the "coming soon" placeholder; no UI calls `delete-user` or the export. Contract for Phase 6: `authClient.deleteUser({ password })` for email users; Google-only users have no credential account, so send no password and rely on a **fresh session** (`freshAge`, 1 day by default; otherwise Better Auth answers `SESSION_EXPIRED` and the user must sign in again). `sendDeleteAccountVerification` is deliberately **not** configured: setting it would make the password flow email a link instead of deleting. After deleting, call `clearApiToken()` (the wrapped `signOut` does it; `deleteUser` itself doesn't) and redirect.
+
+### Open issues / API gaps / decisions deferred
+- **No endpoint exposes the upload limits** (5 MB, 5 pages, 20 resumes): `src/lib/api/limits.ts` duplicates the backend defaults. Suggest adding them to `GET /v1/credits` or a `/v1/limits`; until then changing a backend limit means changing `limits.ts`.
+- A **concurrent-upload race** yields `DUPLICATE_JD` inside the job with details `{jd_url}` only (no `jd_id`), so the UI can only show the error. Rare; the inline duplicate check carries `jd_id`.
+- History fetches **every** JD (up to 500, full `jd_object`) just to preview a job on click. Fine now; if it grows, fetch `GET /v1/job-descriptions/{id}` on demand instead. `X-Total-Count` is read by the client but not used for pagination yet.
+- Pre-existing hydration warning on `/dashboard/history?tab=screener` (`TopNav > Sheet`, a Radix id mismatch from `useSearchParams`); the UI still works. Not caused by this phase; Phase 6 may fix it when it reworks the shell.
+- A user's first request creates their credit account, so two parallel first requests race on `INSERT ... ON CONFLICT DO NOTHING`: fine (tested live, the dashboard fires 6 at once).
+- Phase 8: run the Better Auth migration (creates `jwks`) on production; set `NEXT_PUBLIC_API_URL` as **build-time**, `API_INTERNAL_URL` + `INTERNAL_API_KEY` runtime; `BETTER_AUTH_URL` must equal the backend's `AUTH_ISSUER`; rotate and re-set `N8N_API_KEY` after the n8n key rotation.
+
+### Next session starting point
+- Phase 5 (design system + marketing). First: read the "Temporary UI" list above, then start the stack as described (`npm run dev` + the backend) so you can see real screens while designing. Phase 5 only needs the marketing/auth routes; the dashboard keeps working on the new data layer meanwhile.
+- Must not break: `src/lib/api/*` contracts (`ApiError`, `waitForJob`, `describeError`), the `jwt()` payload keeping `email`, `deleteUser.beforeDelete` aborting on any backend failure, `NEXT_PUBLIC_API_URL` being build-time, nothing in `src/` referencing n8n except the contact route, no Clerk / `middleware.ts` / Vercel Analytics, and nothing run against the production DB before phase 8.

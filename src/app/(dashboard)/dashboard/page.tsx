@@ -14,7 +14,6 @@ import {
   ArrowRight,
   BarChart3,
 } from "lucide-react";
-import type { JobMatchSummary } from "@/types/n8n";
 
 function scoreColor(score: number) {
   if (score >= 75) return "text-emerald-600 dark:text-emerald-400";
@@ -33,7 +32,7 @@ function formatDate(iso: string) {
 export default function DashboardPage() {
   const { data: session } = useSession();
   const firstName = session?.user.name?.trim().split(/\s+/)[0];
-  const { analytics, matches, loading } = useDashboardData();
+  const { overview, credits, loading, error } = useDashboardData();
 
   if (loading) {
     return (
@@ -72,33 +71,24 @@ export default function DashboardPage() {
     );
   }
 
-  const totalResumes = analytics?.total_resume_processed ?? 0;
-  const totalJds = analytics?.total_jds_processed ?? 0;
-  const totalMatches = analytics?.total_job_match_summary_processed ?? 0;
-
-  const recentMatches: JobMatchSummary[] = matches
-    ? [...matches]
-        .sort(
-          (a, b) =>
-            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-        )
-        .slice(0, 5)
-    : [];
+  const counts = overview?.counts;
+  const recentMatches = overview?.recent_matches ?? [];
+  const matchCost = credits?.costs.match ?? 1;
 
   const stats = [
     {
-      label: "Total Resumes Processed",
-      value: String(totalResumes),
+      label: "Resumes",
+      value: String(counts?.resumes ?? 0),
       icon: FileText,
     },
     {
-      label: "Total JDs Processed",
-      value: String(totalJds),
+      label: "Job Descriptions",
+      value: String(counts?.job_descriptions ?? 0),
       icon: Briefcase,
     },
     {
-      label: "Total Match Summaries",
-      value: String(totalMatches),
+      label: "Analyses",
+      value: String(counts?.matches ?? 0),
       icon: BarChart3,
     },
   ];
@@ -114,6 +104,8 @@ export default function DashboardPage() {
           Here&apos;s an overview of your resume match activity.
         </p>
       </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-3">
@@ -143,34 +135,32 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="p-0">
             <ul className="divide-y divide-border">
-              {recentMatches.map((match, i) => (
+              {recentMatches.map((match) => (
                 <li
-                  key={`${match.file_name ?? match.file_id ?? i}-${match.jd_url ?? match.url_id ?? i}-${i}`}
+                  key={match.id}
                   className="flex items-center justify-between px-6 py-3"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
-                        {match.file_name ?? match.file_id ?? "Unknown"}
+                        {match.resume_file_name ?? "Unknown"}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {match.jd_url && match.jd_url.trim() !== ""
-                          ? match.jd_url
-                          : match.job_description?.company_name && match.job_description?.job_title
-                            ? `${match.job_description.company_name} — ${match.job_description.job_title}`
-                            : match.job_description?.company_name || match.job_description?.job_title || "—"}
+                        {match.company_name && match.job_title
+                          ? `${match.company_name} — ${match.job_title}`
+                          : match.company_name || match.job_title || match.jd_url || "—"}
                       </p>
                     </div>
                   </div>
                   <div className="ml-4 shrink-0 text-right">
                     <p
-                      className={`text-sm font-bold ${scoreColor(match.job_match_summary?.match_summary?.overall_score_percent ?? 0)}`}
+                      className={`text-sm font-bold ${scoreColor(match.overall_score_percent ?? 0)}`}
                     >
-                      {match.job_match_summary?.match_summary?.overall_score_percent ?? 0}%
+                      {match.overall_score_percent ?? 0}%
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {match.updated_at ? formatDate(match.updated_at) : "—"}
+                      {match.created_at ? formatDate(match.created_at) : "—"}
                     </p>
                   </div>
                 </li>
@@ -197,7 +187,7 @@ export default function DashboardPage() {
               </Button>
             </div>
             <Badge variant="secondary" className="mt-4">
-              Free · No credit card required
+              {matchCost} credit per analysis · uploads are free
             </Badge>
           </CardContent>
         </Card>

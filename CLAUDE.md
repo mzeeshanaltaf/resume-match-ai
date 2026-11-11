@@ -6,20 +6,22 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 - **Next.js 16.1.6** (App Router, `src/` dir), TypeScript, React 19
 - **Tailwind CSS v4 + shadcn/ui** (slate theme, emerald `#10b981` accent), `next-themes` dark mode
 - **Auth: Better Auth** (`better-auth` + `pg`) — email/password + Google OAuth
-- **Postgres** — holds only Better Auth tables (`user`/`session`/`account`/`verification`) in the **`resume_match`** schema
-- **n8n webhooks** = the sole AI/data backend (no ORM, no app tables in code)
+- **Postgres** — `resume_match` schema holds the Better Auth tables (`user`/`session`/`account`/`verification`/`jwks`, owned by the frontend) and the app tables (owned by the FastAPI backend's Alembic; the frontend never queries them)
+- **FastAPI backend** (`backend/`) = the AI/data backend; the browser calls it directly with a Better Auth JWT. **n8n is only used by the contact form** (`src/app/api/contact`)
 - **Resend** (auth OTP emails), **Umami** analytics, **Upstash Redis** (contact rate limit)
 - Hosted on **Coolify** (Hostinger VPS), auto-deploy via **GitHub Actions** on push to `main`
 - Package manager: **npm**. Repo: `mzeeshanaltaf/resume-match-ai`.
 
 ## Auth (Better Auth — replaced Clerk 2026-07-23)
-- `src/lib/auth.ts` — `betterAuth({ database: new Pool({ connectionString, options: "-c search_path=resume_match" }), emailAndPassword, socialProviders (google, gated on env), databaseHooks.user.create.after → signupCredits() })`
-- `src/lib/auth-client.ts` — `signIn/signUp/signOut/useSession`
-- `src/lib/get-user.ts` — **`getUserId()`**: the single server-side auth check used by every protected API route (replaced Clerk's `auth()`)
+- `src/lib/auth.ts` — `betterAuth({ database: new Pool({ connectionString, options: "-c search_path=resume_match" }), emailAndPassword, socialProviders (google, gated on env), plugins: [jwt(), emailOTP()], user.deleteUser })`
+- `jwt()`: EdDSA, `issuer` = `audience` = `BETTER_AUTH_URL`, `definePayload` → `{ email }` only (+ `sub`). **Keep `email` in the payload**: the backend's deleted-account (0-credit) check reads it. Endpoints: `GET /api/auth/token` (needs the session cookie), `GET /api/auth/jwks`. Needs the `jwks` table (`npx @better-auth/cli@latest migrate`).
+- `user.deleteUser.enabled` + `beforeDelete` → `DELETE {API_INTERNAL_URL}/internal/users/{id}` (`X-Internal-Key`, body `{email}`); **any failure throws**, so nothing is deleted unless the backend erased first. With no `sendDeleteAccountVerification` configured, `POST /api/auth/delete-user` takes `{password}` (or a fresh session for Google-only users).
+- `src/lib/auth-client.ts` — `signIn/signUp/signOut/useSession/emailOtp`, `jwtClient()` (cast `as never`: better-auth 1.6.24's `jwtClient` types are rejected by `createAuthClient`, which also erases other plugins' typings), and **`getApiToken()` / `clearApiToken()`**: cached JWT, refreshed 60 s before `exp`, shared in-flight request. `signOut` is wrapped to clear the cache.
+- `src/lib/get-user.ts` — `getUserId()`: server-side session check (no protected Next.js API routes remain besides auth/contact)
+- **Signup credits are not granted here any more**: the backend creates the credit account (10 credits) on the user's first authenticated call.
 - `src/app/api/auth/[...all]/route.ts` — `toNextJsHandler(auth)`; health check at `/api/auth/ok`
 - `src/proxy.ts` — Better Auth `getSessionCookie` gate for `/dashboard/*` → `/sign-in` (Next.js 16 uses `proxy.ts`, not `middleware.ts`)
 - Custom `/sign-in` + `/sign-up` pages via `src/components/marketing/auth-form.tsx` (Google button only renders when `GOOGLE_CLIENT_ID`/`SECRET` set); all auth screens share `auth-shell.tsx`
-- **New-user credits come from the DB hook**, not a webhook.
 
 ## Email OTP (verification + password reset, added 2026-07-25)
 - `emailOTP` plugin in `auth.ts`: `overrideDefaultEmailVerification`, `disableSignUp: true` (closes passwordless `/sign-in/email-otp`), 6 digits, `expiresIn: 600`, `allowedAttempts: 3`, `storeOTP: "hashed"`, `rateLimit {60s, 3}`. **Verification is ENFORCED** (`requireEmailVerification: true`) + `sendOnSignIn` + `autoSignInAfterVerification`.
@@ -35,26 +37,35 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 - `src/app/layout.tsx` — theme provider + gated Umami `<Script>` + Organization JSON-LD (no auth provider needed)
 - Marketing: landing (`page.tsx`), `sign-in`, `sign-up`, `contact`, about/privacy/terms
 - Dashboard: overview, `match` (Job Fit), `screen` (Recruiter screening), `history`, `settings`
-- `src/contexts/dashboard-data.tsx` — `DashboardDataProvider` caches analytics/matches/credits; `refreshAll()` after workflows, `refreshCredits()` after uploads. Consumed by all dashboard pages.
+- `src/contexts/dashboard-data.tsx` — `DashboardDataProvider` fetches `/v1/overview`, `/v1/credits` (balance + prices), `/v1/credits/transactions?limit=200`, `/v1/matches`, `/v1/resumes`, `/v1/job-descriptions?limit=500` in parallel; `refreshAll()` after a match/screening/delete, `refreshCredits()` for balance + ledger only; `addResume()` / `removeMatch()` for instant UI updates. Consumed by all dashboard pages. Never hardcode credit prices: use `credits.costs`.
 
-## n8n integration (`src/lib/n8n*.ts`)
-- `n8n.ts` = client (`callN8nWebhook`, `callN8nWebhookMultipart`); adds `x-api-key`
-- `n8n-main.ts` (process_resume/scrape_jd/resume_match), `n8n-analytics.ts`, `n8n-credits.ts`, `n8n-data.ts` (`getUserData` unified), `n8n-delete.ts`
-- All webhook IDs + `N8N_API_KEY` in env. n8n keys off the Better Auth user id.
-- Contact form posts to a hardcoded n8n webhook via `src/app/api/contact/route.ts` (honeypot field `hp_field` + Upstash limiter in `src/lib/rate-limit.ts`, fails open).
+## Talking to the backend (`src/lib/api/`)
+- `client.ts` — `api.*` typed endpoints, `ApiError {status, code, message, details}` (parsed from the backend's `{code,message,details}`), `waitForJob<T>(jobId, {onSteps})`: fetch-based SSE reader (EventSource can't send the `Authorization` header) that replays the full history first and **falls back to polling `GET /v1/jobs/{id}`** if the stream drops. One automatic token refresh + retry on `AUTH_REQUIRED|INVALID_TOKEN|TOKEN_EXPIRED`.
+- `types.ts` — hand-written from `backend/openapi.json` (keep in step; the match report types are the old n8n shapes). `errors.ts` — `describeError(err)` maps codes to messages (402 → "You need N credits…"). `limits.ts` — upload limits shown in the UI (mirror the backend defaults; the API doesn't expose them).
+- Long work = `202 {job_id}` → `waitForJob`. Result shapes: resume `{resume_id, resume}`, JD `{jd_id, job_description}`, match `{match_id, match}`, screening `ScreeningResult`.
+- **Modes**: Job Fit uses `candidate` resumes/JDs, the Screener `recruiter` ones (backend `422 MODE_MISMATCH` otherwise). Pickers list existing resumes filtered by mode. Dedup is per mode; a `409 DUPLICATE_RESUME` / `DUPLICATE_JD` is handled by reusing the existing item.
+- Match = 1 credit, screening = 1 per resume (all-or-nothing up front, failed items refunded), upload/JD processing free. Deleting a match keeps the resume and JD. Resume files come from `GET /v1/resumes/{id}/file` on demand (blob → `PdfViewer file={blob}`; DOCX/TXT are download-only).
+- `ShimmeringProgressDialog` is **temporary** blocking progress UI driven by job steps (Phase 6 replaces it with an inline step list).
 
-## API routes (all guard with `const userId = await getUserId()` → 401 if null)
-`resume/{upload,list,[id]}` · `jd/{submit,list,[id]}` · `match/{run,history,[id]}` · `analytics` · `credits/{balance,history}` · `user-data` (unified) · `contact` · `auth/[...all]` · `auth/ok`
+## n8n (contact form only)
+- `src/app/api/contact/route.ts` posts to a hardcoded n8n webhook with `N8N_API_KEY` (honeypot field `hp_field` + Upstash limiter in `src/lib/rate-limit.ts`, fails open). Nothing else in `src/` may reference n8n.
+
+## Next.js API routes
+`contact` · `auth/[...all]` · `auth/ok`. Everything else is a call from the browser to the FastAPI backend.
 
 ## Commands
-- `npm run dev` — dev server (`--hostname 0.0.0.0`); open **http://127.0.0.1:3000** (not `localhost` — IPv6/WSL2 quirk)
+- **Run both apps locally** (3 terminals): `cd backend && docker compose -f docker-compose.dev.yml up -d && uv run alembic upgrade head`, then backend `cd backend && uv run uvicorn app.main:app --reload` (or `DEV_REAL_AUTH=1 uv run python dev/dev_server.py` for fake AI + real sign-in), then frontend `npm run dev`. Open **http://127.0.0.1:3000** (not `localhost` — IPv6/WSL2 quirk).
+- `npm run dev` — dev server (`--hostname 0.0.0.0`)
 - `npx tsc --noEmit` — typecheck · `npm run build` — prod build (needs real `BETTER_AUTH_SECRET`; Google optional)
-- Better Auth schema: `CREATE SCHEMA IF NOT EXISTS resume_match;` then `npx @better-auth/cli@latest migrate`
+- Better Auth schema: `CREATE SCHEMA IF NOT EXISTS resume_match;` then `DATABASE_URL=… BETTER_AUTH_SECRET=… npx @better-auth/cli@latest migrate` (creates `jwks` too). **Pass `DATABASE_URL` explicitly**: `.env.local` holds the production URL.
+- Local dev env: put the dev values in a gitignored **`.env.development.local`** (Next loads it after `.env.local` for `next dev`): `DATABASE_URL=postgresql://resumatch:resumatch@127.0.0.1:5433/resumatch_dev`, `BETTER_AUTH_URL=http://127.0.0.1:3000`, `NEXT_PUBLIC_API_URL`, `API_INTERNAL_URL`, `INTERNAL_API_KEY`, and a dummy `RESEND_API_KEY` so no real email is sent. Backend `backend/.env`: `AUTH_JWKS_URL=http://127.0.0.1:3000/api/auth/jwks`, `AUTH_ISSUER=http://127.0.0.1:3000`, `CORS_ORIGINS=http://127.0.0.1:3000`, same `INTERNAL_API_KEY`.
+- Dev users can't receive the OTP email: sign up, then `update resume_match."user" set "emailVerified" = true where email = …` in the dev DB.
 
 ## Env vars (`.env.local`; template in `.env.example`, kept via `!.env.example` gitignore exception)
-`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `DATABASE_URL`, `GOOGLE_CLIENT_ID/SECRET`,
+`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (also JWT issuer/audience; must equal the backend's `AUTH_ISSUER`), `DATABASE_URL`, `GOOGLE_CLIENT_ID/SECRET`,
 `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (unquoted, runtime),
-`N8N_WEBHOOK_BASE_URL`, `N8N_API_KEY`, `N8N_*_WEBHOOK_ID`,
+`NEXT_PUBLIC_API_URL` (**build-time**), `API_INTERNAL_URL` + `INTERNAL_API_KEY` (runtime, server-only; account deletion),
+`N8N_API_KEY` (contact form only),
 `NEXT_PUBLIC_UMAMI_SCRIPT_URL`, `NEXT_PUBLIC_UMAMI_WEBSITE_ID`,
 `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
 
@@ -69,7 +80,7 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 - Reads `backend/.env` only, **never** the repo-root `.env.local` (production `DATABASE_URL`). All settings/limits/model names live in `backend/app/config.py`; template `backend/.env.example`.
 - Phase 2 added the documents pipeline: `POST/GET /v1/resumes`, `/v1/job-descriptions`, `/v1/jobs/{id}[/events]` (SSE). Uploads return `202 {job_id}`; extraction, OCR, the Decisions-API validation gate and storage run as in-process jobs. All OpenAI calls go through `app/services/llm.py`; model/tier/limits come only from settings. `uv run python dev/dev_server.py` runs the app with a dev JWT and fake AI (no keys).
 - Phase 3 completed the API: `POST/GET/DELETE /v1/matches`, `/v1/matches/{id}/{tailored-bullets,cover-letter}`, `POST /v1/screenings`, `/v1/overview`, `/v1/credits[/transactions]`, `GET /v1/account/export`, `DELETE /internal/users/{id}` (X-Internal-Key + body `{email}`; Better Auth's `beforeDelete` hook must send it). Credit-spending jobs reserve with the job row and refund via `services/reservations.py`. The contract is `backend/openapi.json` (`uv run python dev/export_openapi.py`; a test fails when stale); `uv run python dev/smoke_phase3.py` drives it all over real HTTP.
-- Not wired to the Next.js app yet (phase 4); n8n is still the live backend until the cutover. Migration `0002` truncates tables: do not run against production before the deploy phase.
+- Phase 4 wired the Next.js app to it (see "Talking to the backend"); production still runs the old n8n build until the deploy phase. `DEV_REAL_AUTH=1 uv run python dev/dev_server.py` = real Better Auth JWTs (JWKS from `backend/.env`) + fake AI. Migration `0002` truncates tables: do not run against production before the deploy phase.
 
 ## Conventions & gotchas
 - Client components using auth/session must be `"use client"` and use `useSession()`.

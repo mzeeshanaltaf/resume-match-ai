@@ -37,7 +37,7 @@ const sections = [
     title: "4. Third-party services",
     body: [
       "We use Clerk for authentication and identity management. Clerk's privacy policy applies to data processed through their platform.",
-      "Our AI processing pipeline is powered by n8n workflows running on infrastructure we control. No resume data is shared with external AI providers without your knowledge.",
+      "Our own backend service analyses your documents. To do that it sends the text of your resume and the job description to OpenAI, and job posting links you submit are fetched through Firecrawl. We do not share them with anyone else.",
       "We do not use third-party advertising networks or tracking pixels.",
     ],
   },

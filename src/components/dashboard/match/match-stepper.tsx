@@ -1,37 +1,24 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { CheckCircle2, Loader2, ArrowLeft, FileSearch, Target } from "lucide-react";
+import { useState, useEffect } from "react";
+import { CheckCircle2, ArrowLeft, FileSearch, Target } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useDashboardData } from "@/contexts/dashboard-data";
+import { api, isApiError, waitForJob } from "@/lib/api/client";
+import { describeError } from "@/lib/api/errors";
+import type {
+  JobDescriptionJobResult,
+  JobStep,
+  MatchJobResult,
+  MatchOut,
+} from "@/lib/api/types";
 import { ResumePicker } from "./resume-picker";
 import { MatchResults } from "./match-results";
-import type { ResumeMatchResponse, ResumeRecord } from "@/types/n8n";
-import { ShimmeringProgressDialog, type ProgressStep } from "@/components/dashboard/shimmering-progress-dialog";
-
-const JD_URL_STEPS: ProgressStep[] = [
-  { message: "Getting Job Description...", duration: 5000 },
-  { message: "Analyzing Job Description...", duration: 5000 },
-  { message: "Extracting Details...", duration: 10000 },
-  { message: "Almost there...", duration: Infinity },
-];
-
-const JD_TEXT_STEPS: ProgressStep[] = [
-  { message: "Analyzing Job Description...", duration: 5000 },
-  { message: "Extracting Details...", duration: 10000 },
-  { message: "Almost there...", duration: Infinity },
-];
-
-const ANALYZE_STEPS: ProgressStep[] = [
-  { message: "Analyzing Resume...", duration: 5000 },
-  { message: "Analyzing Job Description...", duration: 5000 },
-  { message: "Generating Report...", duration: 15000 },
-  { message: "Almost there...", duration: Infinity },
-];
+import { ShimmeringProgressDialog } from "@/components/dashboard/shimmering-progress-dialog";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -43,77 +30,83 @@ const STEPS = [
 ];
 
 export function MatchStepper() {
-  const { refreshAll } = useDashboardData();
+  const { refreshAll, credits, creditBalance } = useDashboardData();
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  // Picker state lifted here so going Back preserves uploaded resumes
-  const [pickerResumes, setPickerResumes] = useState<ResumeRecord[]>([]);
+  // Picker state lifted here so going Back preserves the selection
   const [pickerSelectedId, setPickerSelectedId] = useState<string | null>(null);
-  const [pickerShowUpload, setPickerShowUpload] = useState(true);
+  const [pickerShowUpload, setPickerShowUpload] = useState<boolean | null>(null);
   const [jdMode, setJdMode] = useState<"url" | "text">("url");
   const [url, setUrl] = useState("");
   const [jdText, setJdText] = useState("");
-  const [matchResult, setMatchResult] = useState<ResumeMatchResponse | null>(null);
+  const [matchResult, setMatchResult] = useState<MatchOut | null>(null);
 
   // Step 3 sub-states
   const [jdStatus, setJdStatus] = useState<"processing" | "done" | "error">("processing");
-  const [jdUrlId, setJdUrlId] = useState<string | null>(null);
+  const [jdId, setJdId] = useState<string | null>(null);
   const [processedJdInput, setProcessedJdInput] = useState<{ mode: "url" | "text"; value: string } | null>(null);
   const [jdError, setJdError] = useState<string | null>(null);
+  // Bump to (re)start job description processing while on step 3
+  const [jdRun, setJdRun] = useState(0);
+  const [jdSteps, setJdSteps] = useState<JobStep[]>([]);
   const [matchLoading, setMatchLoading] = useState(false);
+  const [matchSteps, setMatchSteps] = useState<JobStep[]>([]);
   const [matchError, setMatchError] = useState<string | null>(null);
-  const jdStarted = useRef(false);
+
+  const matchCost = credits?.costs.match ?? 1;
+  const notEnoughCredits = creditBalance !== null && creditBalance < matchCost;
 
   function reset() {
     setCurrentStep(1);
     setSelectedResumeId(null);
-    setPickerResumes([]);
     setPickerSelectedId(null);
-    setPickerShowUpload(true);
+    setPickerShowUpload(null);
     setJdMode("url");
     setUrl("");
     setJdText("");
     setMatchResult(null);
     setJdStatus("processing");
-    setJdUrlId(null);
+    setJdId(null);
     setProcessedJdInput(null);
     setJdError(null);
+    setJdRun(0);
+    setJdSteps([]);
     setMatchLoading(false);
+    setMatchSteps([]);
     setMatchError(null);
-    jdStarted.current = false;
   }
 
-  // Step 3: auto-process JD when entering this step
+  // Step 3: process the JD (as a backend job) when entering the step or on retry
   useEffect(() => {
-    if (currentStep !== 3 || jdStarted.current) return;
-    jdStarted.current = true;
+    if (currentStep !== 3 || jdRun === 0) return;
+    const value = jdMode === "url" ? url.trim() : jdText.trim();
 
     async function processJd() {
       try {
         setJdStatus("processing");
         setJdError(null);
-        const jdBody: Record<string, unknown> = { is_candidate: true };
-        if (jdMode === "url") {
-          jdBody.url = url.trim();
-        } else {
-          jdBody.url = "";
-          jdBody.jd_text = jdText.trim();
-        }
-        const jdRes = await fetch("/api/jd/submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(jdBody),
-        });
-        if (!jdRes.ok) throw new Error("Failed to process job description.");
-        const data = await jdRes.json();
-        const urlId = data.url_id;
-        if (!urlId) throw new Error("Job description processed but no URL ID returned.");
-        setJdUrlId(urlId);
+        setJdSteps([]);
+        const body =
+          jdMode === "url"
+            ? { url: value, mode: "candidate" as const }
+            : { text: value, mode: "candidate" as const };
+        const { job_id } = await api.jobDescriptions.submit(body);
+        const result = await waitForJob<JobDescriptionJobResult>(job_id, { onSteps: setJdSteps });
+        setJdId(result.jd_id);
         setJdStatus("done");
-        setProcessedJdInput({ mode: jdMode, value: jdMode === "url" ? url.trim() : jdText.trim() });
+        setProcessedJdInput({ mode: jdMode, value });
         toast.success("Job description processed!");
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Something went wrong.";
+        // The same posting was added before: reuse it instead of failing.
+        const existing = isApiError(err, "DUPLICATE_JD") ? err.details?.jd_id : null;
+        if (typeof existing === "string") {
+          setJdId(existing);
+          setJdStatus("done");
+          setProcessedJdInput({ mode: jdMode, value });
+          toast.info("You've already added this job description. Using the existing one.");
+          return;
+        }
+        const msg = describeError(err, "Failed to process job description.");
         setJdError(msg);
         setJdStatus("error");
         toast.error(msg);
@@ -121,34 +114,28 @@ export function MatchStepper() {
     }
 
     processJd();
-  }, [currentStep, url, jdText, jdMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, jdRun]);
 
   async function runAnalysis() {
-    if (!jdUrlId || !selectedResumeId) return;
+    if (!jdId || !selectedResumeId) return;
     setMatchLoading(true);
     setMatchError(null);
+    setMatchSteps([]);
     try {
-      const matchRes = await fetch("/api/match/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          file_id: selectedResumeId,
-          url_id: jdUrlId,
-          is_candidate: true,
-        }),
-      });
-      if (!matchRes.ok) throw new Error("Match analysis failed.");
-      const result = await matchRes.json();
-      setMatchResult(result);
-      refreshAll();
+      const { job_id } = await api.matches.create(selectedResumeId, jdId);
+      const result = await waitForJob<MatchJobResult>(job_id, { onSteps: setMatchSteps });
+      setMatchResult(result.match);
       toast.success("Analysis complete!");
       setCurrentStep(4);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong.";
+      const msg = describeError(err, "Match analysis failed.");
       setMatchError(msg);
       toast.error(msg);
     } finally {
       setMatchLoading(false);
+      // Balance changed (spent, or refunded on failure); counts and history too.
+      refreshAll();
     }
   }
 
@@ -174,17 +161,18 @@ export function MatchStepper() {
     }
 
     // Skip reprocessing if the same JD was already processed successfully
-    if (jdUrlId && jdStatus === "done" && processedJdInput?.mode === jdMode && processedJdInput?.value === currentValue) {
+    if (jdId && jdStatus === "done" && processedJdInput?.mode === jdMode && processedJdInput?.value === currentValue) {
+      setMatchError(null);
       setCurrentStep(3);
       return;
     }
 
-    jdStarted.current = false;
     setJdError(null);
     setJdStatus("processing");
-    setJdUrlId(null);
+    setJdId(null);
     setMatchError(null);
     setMatchLoading(false);
+    setJdRun((n) => n + 1);
     setCurrentStep(3);
   }
 
@@ -195,12 +183,12 @@ export function MatchStepper() {
     <ShimmeringProgressDialog
       open={currentStep === 3 && jdStatus === "processing"}
       title="Processing Job Description"
-      steps={jdMode === "url" ? JD_URL_STEPS : JD_TEXT_STEPS}
+      steps={jdSteps}
     />
     <ShimmeringProgressDialog
       open={matchLoading}
       title="Analyzing"
-      steps={ANALYZE_STEPS}
+      steps={matchSteps}
     />
     <div className="space-y-8">
       {/* Step indicator */}
@@ -250,14 +238,12 @@ export function MatchStepper() {
         {/* Step 1: Resume Processing */}
         {currentStep === 1 && (
           <ResumePicker
-            onNext={(fileId) => {
-              setSelectedResumeId(fileId);
+            onNext={(resumeId) => {
+              setSelectedResumeId(resumeId);
               setCurrentStep(2);
             }}
-            resumes={pickerResumes}
             selectedId={pickerSelectedId}
             showUpload={pickerShowUpload}
-            onResumesChange={setPickerResumes}
             onSelectedIdChange={setPickerSelectedId}
             onShowUploadChange={setPickerShowUpload}
           />
@@ -347,12 +333,7 @@ export function MatchStepper() {
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => {
-                      jdStarted.current = false;
-                      setJdError(null);
-                      setJdStatus("processing");
-                      setCurrentStep(3);
-                    }}
+                    onClick={() => setJdRun((n) => n + 1)}
                     className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
                   >
                     Retry
@@ -369,12 +350,23 @@ export function MatchStepper() {
                 <p className="mt-2 text-sm text-muted-foreground">
                   Ready to analyze your resume against this job description.
                 </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The analysis costs {matchCost} credit{matchCost === 1 ? "" : "s"}
+                  {creditBalance !== null && <> · you have {creditBalance}</>}. It&apos;s refunded
+                  if it fails.
+                </p>
+                {notEnoughCredits && (
+                  <p className="mt-2 text-sm text-destructive">
+                    You don&apos;t have enough credits to run this analysis.
+                  </p>
+                )}
                 <div className="mt-6 flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setCurrentStep(2)} className="gap-1">
                     <ArrowLeft className="h-4 w-4" /> Back
                   </Button>
                   <Button
                     onClick={runAnalysis}
+                    disabled={notEnoughCredits}
                     className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
                   >
                     <Target className="h-4 w-4" /> Analyze Match

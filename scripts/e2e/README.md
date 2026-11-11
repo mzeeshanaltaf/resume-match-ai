@@ -21,5 +21,11 @@ Run (servers up: `npm run dev` and `cd backend && DEV_REAL_AUTH=1 uv run python 
 | `e2e-sse.mjs` | Live job step labels reach the progress dialog over SSE with no polling (use `DEV_FAKE_DELAY=1.5`; its second regex also expects the instant "Reading your file" step, which can't be observed: treat the "Checking that it's a resume" label as the pass signal). |
 | `e2e-delete.mjs` | JWT claims, backend auth, account deletion through Better Auth's hook: aborts (502, account intact) when the backend is down, erases everything when up, re-registering the same email yields 0 credits. It stops and restarts the backend on port 8000 itself. |
 
-All three assume the local dev stack and the `resumatch_dev` database in the `resumatch-dev-postgres`
+| `e2e-phase6.mjs` | The redesigned dashboard: Job Fit driven **keyboard-only**, inline live steps, limits and rejection reasons, report page, bullets + cover letter (price first, credits 10 to 8), print state, History, a 3-resume screening and drill-down, credits ledger, data export + once-an-hour message, account deletion (wrong password refused, then erased). |
+| `shots-phase6.mjs` | Seeds a user through the API, then screenshots every dashboard screen at 390 / 820 / 1440 in light and dark (`shots/matrix/`), with axe-core (WCAG 2.2 AA + best practice), a horizontal-scroll check and the full console text. Narrow it with `ONLY`, `SIZES`, `THEMES`. |
+| `states-phase6.mjs` | Forces the unhappy states on the seeded user: real 0 credits, a mocked server `402`, aborted and slow loads, empty accounts (`shots/states/`). |
+
+Phase 6 scripts take `APP_URL` and `API_URL` (defaults `http://127.0.0.1:3005` / `:8012`), so they can run on spare ports when 3000 or 8000 are taken: start Next with `BETTER_AUTH_URL`, `NEXT_PUBLIC_API_URL` and `API_INTERNAL_URL` overridden, and the backend (`PORT=...`) with `AUTH_JWKS_URL`, `AUTH_ISSUER` and `CORS_ORIGINS` pointing at the Next origin.
+
+All of the scripts assume the local dev stack and the `resumatch_dev` database in the `resumatch-dev-postgres`
 container; they run SQL there to mark test users verified. Never point them at production.

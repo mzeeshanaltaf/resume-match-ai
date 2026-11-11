@@ -10,6 +10,8 @@ export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 export const MAX_UPLOAD_MB = MAX_UPLOAD_BYTES / (1024 * 1024);
 export const MAX_RESUME_PAGES = 5;
 export const MAX_SCREENING_RESUMES = 20;
+/** `MAX_JD_CHARS`: pasted posting text (and scraped pages are cut to the same length). */
+export const MAX_JD_CHARS = 20_000;
 
 export const RESUME_ACCEPT = ".pdf,.docx,.txt";
 export const RESUME_FORMATS_LABEL = "PDF, DOCX or TXT";

@@ -1,122 +1,131 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { ArrowRight, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { RotateCcw, AlertCircle, History } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { ApiError } from "@/lib/api/client";
 import { describeError } from "@/lib/api/errors";
 import type { ScreeningResult } from "@/lib/api/types";
+import { plural } from "@/lib/format";
+import { SCORE_TEXT, scoreBand } from "@/lib/score";
+import { cn } from "@/lib/utils";
+import { ErrorNote } from "@/components/dashboard/notes";
+import { ScrollRegion } from "@/components/dashboard/scroll-region";
 
-function scoreBadge(score: number) {
-  if (score >= 75) return "border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300";
-  if (score >= 50) return "border-yellow-300 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-400";
-  return "border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400";
-}
-
-function confidenceClass(conf: string) {
-  switch (conf.toLowerCase()) {
-    case "high":
-      return "text-emerald-600 dark:text-emerald-400";
-    case "medium":
-      return "text-yellow-600 dark:text-yellow-400";
-    default:
-      return "text-red-500 dark:text-red-400";
-  }
-}
-
-interface ScreenResultsProps {
+/**
+ * The ranked pile. Each row opens that candidate's full report; the same
+ * reports are in History. A failed resume is listed with its reason, and its
+ * credit has already been returned.
+ */
+export function ScreenResults({
+  result,
+  onReset,
+}: {
   result: ScreeningResult;
   onReset: () => void;
-}
-
-export function ScreenResults({ result, onReset }: ScreenResultsProps) {
-  const router = useRouter();
-  // The backend already ranks them; sorting again keeps this robust to ties.
+}) {
+  // The backend ranks them; sorting again keeps this robust to ties.
   const ranked = [...result.ranked].sort((a, b) => a.rank - b.rank);
   const failed = result.failed;
 
   return (
-    <div className="space-y-6">
+    <section className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Screening Results</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {ranked.length} resume{ranked.length !== 1 ? "s" : ""} screened
-          {failed.length > 0 && `, ${failed.length} failed`}
-          . Ranked by match score.
+        <h2 className="text-lg font-semibold">Ranking</h2>
+        <p className="mt-1 text-base text-muted-foreground">
+          {plural(ranked.length, "resume")} scored
+          {failed.length > 0 && `, ${failed.length} could not be`}. Highest fit first.
           {result.refunded_credits > 0 &&
-            ` ${result.refunded_credits} credit${result.refunded_credits === 1 ? " was" : "s were"} refunded for the failed ${failed.length === 1 ? "resume" : "resumes"}.`}
+            ` ${plural(result.refunded_credits, "credit")} came back for the ${failed.length === 1 ? "resume" : "resumes"} that failed.`}
         </p>
       </div>
 
       {ranked.length > 0 && (
-        <div className="space-y-3">
-          {ranked.map((item) => (
-            <div key={item.match_id} className="rounded-lg border border-border p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="font-mono text-xs text-muted-foreground shrink-0">
-                    {item.rank}
-                  </span>
-                  <span className="text-sm font-medium truncate">{item.file_name ?? "Resume"}</span>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <Badge variant="outline" className={cn("text-xs font-bold", scoreBadge(item.overall_score_percent))}>
-                    {item.overall_score_percent}%
-                  </Badge>
-                  <span className={cn("text-xs font-semibold capitalize", confidenceClass(item.score_confidence))}>
-                    {item.score_confidence}
-                  </span>
-                </div>
-              </div>
-              {item.rationale && (
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {item.rationale}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
+        <ScrollRegion label="Ranked resumes">
+          <table className="w-full min-w-[34rem] border-collapse text-left text-sm">
+            <caption className="sr-only">Resumes ranked by fit with the job posting</caption>
+            <thead>
+              <tr className="border-b-2 border-foreground text-sm">
+                <th scope="col" className="w-12 py-2 pr-3 font-semibold">
+                  Rank
+                </th>
+                <th scope="col" className="py-2 pr-4 font-semibold">
+                  Resume and reason
+                </th>
+                <th scope="col" className="w-36 py-2 pr-4 text-right font-semibold">
+                  Score
+                </th>
+                <th scope="col" className="w-32 py-2 text-right font-semibold">
+                  <span className="sr-only">Report</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {ranked.map((item) => {
+                const band = scoreBand(item.overall_score_percent);
+                return (
+                  <tr key={item.match_id} className="align-top">
+                    <td className="py-3 pr-3 text-lg font-bold tabular-nums">{item.rank}</td>
+                    <td className="py-3 pr-4">
+                      <p className="font-semibold">{item.file_name ?? "Resume"}</p>
+                      {item.rationale && (
+                        <p className="mt-1 max-w-prose text-muted-foreground">{item.rationale}</p>
+                      )}
+                    </td>
+                    <td className="py-3 pr-4 text-right">
+                      <span
+                        className={cn(
+                          "text-lg font-bold tabular-nums",
+                          SCORE_TEXT[band.tone],
+                        )}
+                      >
+                        {item.overall_score_percent}%
+                      </span>
+                      <span className="block whitespace-nowrap text-sm text-muted-foreground">
+                        {item.score_confidence} confidence
+                      </span>
+                    </td>
+                    <td className="py-3 text-right">
+                      <Button asChild size="sm" variant="outline">
+                        <Link
+                          href={`/dashboard/reports/${item.match_id}`}
+                          aria-label={`Open the report for ${item.file_name ?? "this resume"}`}
+                        >
+                          Open report <ArrowRight />
+                        </Link>
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </ScrollRegion>
       )}
 
-      {/* Failed items */}
       {failed.length > 0 && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertCircle className="h-4 w-4 text-destructive" />
-            <span className="text-sm font-medium text-destructive">
-              {failed.length} resume{failed.length !== 1 ? "s" : ""} could not be analyzed
-            </span>
-          </div>
+        <ErrorNote title={`${plural(failed.length, "resume")} could not be scored`}>
           <ul className="space-y-1">
             {failed.map((item) => (
-              <li key={item.resume_id} className="text-xs text-muted-foreground">
-                {item.file_name ?? "Resume"}:{" "}
+              <li key={item.resume_id}>
+                <span className="font-semibold">{item.file_name ?? "Resume"}:</span>{" "}
                 {describeError(
-                  new ApiError(0, item.error.code, item.error.message, item.error.details ?? null)
+                  new ApiError(0, item.error.code, item.error.message, item.error.details ?? null),
                 )}
               </li>
             ))}
           </ul>
-        </div>
+        </ErrorNote>
       )}
 
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" className="gap-2" onClick={onReset}>
-          <RotateCcw className="h-4 w-4" />
-          New screening
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" onClick={onReset}>
+          <RotateCcw /> Screen another stack
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={() => router.push("/dashboard/history?tab=screener")}
-        >
-          <History className="h-4 w-4" />
-          History
+        <Button asChild variant="ghost">
+          <Link href="/dashboard/history?tab=screener">See all screenings</Link>
         </Button>
       </div>
-    </div>
+    </section>
   );
 }

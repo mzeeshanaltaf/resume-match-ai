@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { HelpCircle, LogOut, Settings } from "lucide-react";
 import { useSession, signOut } from "@/lib/auth-client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,7 +14,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, Settings } from "lucide-react";
 
 function initials(nameOrEmail: string) {
   const parts = nameOrEmail.trim().split(/\s+/);
@@ -32,7 +32,7 @@ export function UserMenu() {
   }
 
   if (isPending) {
-    return <Skeleton className="h-8 w-8 rounded-full" />;
+    return <Skeleton className="size-9 rounded-full" />;
   }
 
   const user = session?.user;
@@ -41,36 +41,36 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-emerald-500/10 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+        <button
+          className="flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring md:size-9"
+          aria-label="Account menu"
+        >
+          <Avatar className="size-9 md:size-8">
+            <AvatarFallback className="bg-secondary text-xs font-semibold text-foreground">
               {initials(user.name || user.email || "U")}
             </AvatarFallback>
           </Avatar>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="truncate text-sm font-medium">
-            {user.name || "Account"}
-          </span>
-          <span className="truncate text-xs font-normal text-muted-foreground">
-            {user.email}
-          </span>
+          <span className="truncate text-sm font-semibold">{user.name || "Account"}</span>
+          <span className="truncate text-sm font-normal text-muted-foreground">{user.email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/dashboard/settings" className="cursor-pointer">
-            <Settings className="h-4 w-4" />
-            Settings
+            <Settings /> Settings
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={handleSignOut}
-          className="cursor-pointer text-destructive focus:text-destructive"
-        >
-          <LogOut className="h-4 w-4" />
-          Sign out
+        <DropdownMenuItem asChild>
+          <Link href="/dashboard/help" className="cursor-pointer">
+            <HelpCircle /> Help
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
+          <LogOut /> Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

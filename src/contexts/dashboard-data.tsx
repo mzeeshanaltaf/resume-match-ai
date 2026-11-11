@@ -22,7 +22,7 @@ import type {
 } from "@/lib/api/types";
 
 /** Ledger rows kept in memory for the Credits tab. */
-const LEDGER_LIMIT = 200;
+export const LEDGER_LIMIT = 200;
 
 interface DashboardDataContextType {
   overview: OverviewOut | null;

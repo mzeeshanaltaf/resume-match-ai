@@ -1,17 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowDown, ArrowUp, ArrowUpDown, ArrowRight, Loader2, Search, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,501 +17,359 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  ArrowUpDown,
-  Trash2,
-  Search,
-  Loader2,
-  Target,
-  ScanSearch,
-  FileText,
-  ExternalLink,
-  Building2,
-  MapPin,
-  Briefcase,
-} from "lucide-react";
-import { toast } from "sonner";
-import { MatchDetailDialog } from "./match-detail-dialog";
-import { ResumePreviewDialog, type PreviewTarget } from "./resume-preview-dialog";
-import { cn } from "@/lib/utils";
+import { useDashboardData } from "@/contexts/dashboard-data";
 import { api } from "@/lib/api/client";
 import { describeError } from "@/lib/api/errors";
-import { useDashboardData } from "@/contexts/dashboard-data";
-import type {
-  JobDescription,
-  JobDescriptionOut,
-  MatchListItem,
-  ResumeOut,
-} from "@/lib/api/types";
+import type { JobDescriptionOut, MatchListItem, ResumeOut } from "@/lib/api/types";
+import { formatDate } from "@/lib/format";
+import { SCORE_TEXT, scoreBand } from "@/lib/score";
+import { cn } from "@/lib/utils";
+import {
+  JdPreviewDialog,
+  safeUrl,
+  type JdPreviewTarget,
+} from "@/components/dashboard/jd-preview-dialog";
+import { ScrollRegion } from "@/components/dashboard/scroll-region";
+import { ResumePreviewDialog, type PreviewTarget } from "./resume-preview-dialog";
 
 type Tab = "job_fit" | "screener";
-type SortField = "match_score" | "created_at";
+type SortField = "score" | "date";
 type SortDir = "asc" | "desc";
-
-function getScore(match: MatchListItem): number {
-  return match.overall_score_percent ?? 0;
-}
-
-
-function scoreBadgeClass(score: number) {
-  if (score >= 75) return "border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300";
-  if (score >= 50) return "border-yellow-300 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400";
-  return "border-red-300 dark:border-red-800 text-red-700 dark:text-red-400";
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-
-function isValidUrl(str: string) {
-  try { new URL(str); return true; } catch { return false; }
-}
 
 export function HistoryTable({
   matches,
   resumes,
-  jds = [],
+  jds,
   defaultTab = "job_fit",
 }: {
   matches: MatchListItem[];
   resumes: ResumeOut[];
-  jds?: JobDescriptionOut[];
+  jds: JobDescriptionOut[];
   defaultTab?: Tab;
 }) {
   const { removeMatch, refreshAll } = useDashboardData();
 
-  // resume id -> metadata, for the preview (file type decides PDF vs download)
-  const resumeMap = useMemo(() => {
-    const map = new Map<string, ResumeOut>();
-    for (const r of resumes) map.set(r.id, r);
-    return map;
-  }, [resumes]);
+  const resumeMap = useMemo(() => new Map(resumes.map((r) => [r.id, r])), [resumes]);
+  const jdMap = useMemo(() => new Map(jds.map((j) => [j.id, j])), [jds]);
 
-  // jd id -> record, for the job description preview
-  const jdMap = useMemo(() => {
-    const map = new Map<string, JobDescriptionOut>();
-    for (const j of jds) map.set(j.id, j);
-    return map;
-  }, [jds]);
-  const [activeTab, setActiveTab] = useState<Tab>(defaultTab);
+  const [tab, setTab] = useState<Tab>(defaultTab);
   const [filter, setFilter] = useState("");
-  const [sortField, setSortField] = useState<SortField>("created_at");
+  const [sortField, setSortField] = useState<SortField>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [viewMatchId, setViewMatchId] = useState<string | null>(null);
-  const [viewJd, setViewJd] = useState<{ jd: JobDescription | null; jdUrl?: string } | null>(null);
-  const [previewResume, setPreviewResume] = useState<PreviewTarget | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [resumeTarget, setResumeTarget] = useState<PreviewTarget | null>(null);
+  const [jdTarget, setJdTarget] = useState<JdPreviewTarget | null>(null);
   const [pendingDelete, setPendingDelete] = useState<MatchListItem | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const jobFit = matches.filter((m) => m.mode === "candidate");
+  const screener = matches.filter((m) => m.mode === "recruiter");
+  const tabMatches = tab === "job_fit" ? jobFit : screener;
+
+  const q = filter.trim().toLowerCase();
+  const rows = tabMatches
+    .filter(
+      (m) =>
+        !q ||
+        [m.resume_file_name, m.jd_url, m.company_name, m.job_title].some((v) =>
+          v?.toLowerCase().includes(q),
+        ),
+    )
+    .sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortField === "score") {
+        return ((a.overall_score_percent ?? 0) - (b.overall_score_percent ?? 0)) * dir;
+      }
+      return (
+        (new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime()) * dir
+      );
+    });
 
   function toggleSort(field: SortField) {
-    if (sortField === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
+    if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
       setSortField(field);
       setSortDir("desc");
     }
   }
 
-  const jobFitMatches = matches.filter((m) => m.mode === "candidate");
-  const screenerMatches = matches.filter((m) => m.mode === "recruiter");
-  const tabMatches = activeTab === "job_fit" ? jobFitMatches : screenerMatches;
-
-  const filtered = tabMatches
-    .filter((m) => {
-      if (!filter) return true;
-      const q = filter.toLowerCase();
-      return (
-        m.resume_file_name?.toLowerCase().includes(q) ||
-        m.jd_url?.toLowerCase().includes(q) ||
-        m.company_name?.toLowerCase().includes(q) ||
-        m.job_title?.toLowerCase().includes(q)
-      );
-    })
-    .sort((a, b) => {
-      const mul = sortDir === "asc" ? 1 : -1;
-      if (sortField === "match_score") return (getScore(a) - getScore(b)) * mul;
-      return (
-        (new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime()) * mul
-      );
-    });
-
-  async function handleDelete(match: MatchListItem) {
+  async function remove(match: MatchListItem) {
     setDeletingId(match.id);
     try {
-      // Removes only this analysis; the resume and job description stay.
+      // Removes only this analysis; the resume and the posting stay.
       await api.matches.remove(match.id);
       removeMatch(match.id);
-      toast.success("Analysis deleted. Your resume and job description were kept.");
-      refreshAll(); // counts and overview
+      toast.success("Analysis deleted. Your resume and the posting were kept.");
+      refreshAll();
     } catch (err) {
-      toast.error(describeError(err, "Something went wrong. Please try again."));
+      toast.error(describeError(err, "The analysis could not be deleted."));
     } finally {
       setDeletingId(null);
     }
   }
 
   return (
-    <>
-      {/* Tabs */}
-      <div className="flex items-center gap-4 mb-4">
-        <div className="flex gap-1 rounded-lg border border-border p-1 bg-muted/30">
-          <button
-            onClick={() => { setActiveTab("job_fit"); setFilter(""); }}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              activeTab === "job_fit"
-                ? "bg-background shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Target className="h-3.5 w-3.5" />
-            Job Fit
-            {jobFitMatches.length > 0 && (
-              <span className="ml-1 text-xs text-muted-foreground">
-                ({jobFitMatches.length})
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => { setActiveTab("screener"); setFilter(""); }}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              activeTab === "screener"
-                ? "bg-background shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <ScanSearch className="h-3.5 w-3.5" />
-            Resume Screener
-            {screenerMatches.length > 0 && (
-              <span className="ml-1 text-xs text-muted-foreground">
-                ({screenerMatches.length})
-              </span>
-            )}
-          </button>
+    <Tabs
+      value={tab}
+      className="min-w-0 gap-0"
+      onValueChange={(v) => {
+        setTab(v as Tab);
+        setFilter("");
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <TabsList variant="line" aria-label="Which tool">
+          <TabsTrigger value="job_fit">Job Fit ({jobFit.length})</TabsTrigger>
+          <TabsTrigger value="screener">Screener ({screener.length})</TabsTrigger>
+        </TabsList>
+
+        <div className="relative w-full sm:w-72">
+          <label htmlFor="history-filter" className="sr-only">
+            Filter by resume or job
+          </label>
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            id="history-filter"
+            placeholder="Filter by resume or job"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="pl-9"
+          />
         </div>
       </div>
 
-      {/* Filter */}
-      <div className="relative mb-4 max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Filter by resume or job…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center py-16 text-center">
-          <Search className="mb-3 h-10 w-10 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">
-            {filter
-              ? "No matches found for your search."
-              : activeTab === "job_fit"
-                ? "No Job Fit analyses yet."
-                : "No Resume Screener analyses yet."}
+      {/* Both panels stay in the DOM so each tab's aria-controls points at a real element. */}
+      {(["job_fit", "screener"] as const).map((t) => (
+        <TabsContent key={t} value={t} forceMount className="min-w-0 outline-none">
+      {t === tab && (rows.length === 0 ? (
+        <div className="mt-10 max-w-md">
+          <h2 className="text-lg font-semibold">
+            {q ? "Nothing matches that filter" : `No ${tab === "job_fit" ? "Job Fit" : "Screener"} analyses yet`}
+          </h2>
+          <p className="mt-1 text-base text-muted-foreground">
+            {q
+              ? "Check the spelling, or clear the filter to see everything."
+              : tab === "job_fit"
+                ? "Read a resume against a job posting and the report will be kept here."
+                : "Score a stack of resumes against a posting and every report will be kept here."}
           </p>
+          {q ? (
+            <Button variant="outline" className="mt-4" onClick={() => setFilter("")}>
+              Clear the filter
+            </Button>
+          ) : (
+            <Button asChild className="mt-4">
+              <Link href={tab === "job_fit" ? "/dashboard/match" : "/dashboard/screen"}>
+                {tab === "job_fit" ? "Start Job Fit" : "Start the Screener"} <ArrowRight />
+              </Link>
+            </Button>
+          )}
         </div>
       ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Resume</TableHead>
-                <TableHead>Job</TableHead>
-                <TableHead>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="-ml-3 gap-1 font-medium"
-                    onClick={() => toggleSort("match_score")}
-                  >
-                    Score
-                    <ArrowUpDown className="h-3.5 w-3.5" />
-                  </Button>
-                </TableHead>
-                <TableHead>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="-ml-3 gap-1 font-medium"
-                    onClick={() => toggleSort("created_at")}
-                  >
-                    Date
-                    <ArrowUpDown className="h-3.5 w-3.5" />
-                  </Button>
-                </TableHead>
-                <TableHead>Match Report</TableHead>
-                <TableHead className="w-15" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((match) => {
-                const isDeleting = deletingId === match.id;
-                const score = getScore(match);
-                const resume = resumeMap.get(match.resume_id);
-                const jdRecord = match.jd_id ? jdMap.get(match.jd_id) : undefined;
-                const fileName = match.resume_file_name ?? "Unknown";
+        <ScrollRegion label="Past analyses" className="mt-4">
+          <table className="w-full border-collapse text-left">
+            <caption className="sr-only">Your past analyses</caption>
+            <thead>
+              <tr className="border-b-2 border-foreground text-sm">
+                <th scope="col" className="py-2 pr-4 font-semibold">
+                  Resume
+                </th>
+                <th scope="col" className="hidden py-2 pr-4 font-semibold md:table-cell">
+                  Job
+                </th>
+                <SortHeader
+                  label="Score"
+                  field="score"
+                  active={sortField}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                  className="w-24 text-right"
+                />
+                <SortHeader
+                  label="Date"
+                  field="date"
+                  active={sortField}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                  className="hidden w-32 md:table-cell"
+                />
+                <th scope="col" className="w-12 py-2 text-right font-semibold sm:w-40">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((m) => {
+                const score = m.overall_score_percent ?? 0;
+                const band = scoreBand(score);
+                const resume = resumeMap.get(m.resume_id);
+                const jdRecord = m.jd_id ? jdMap.get(m.jd_id) : undefined;
+                const fileName = m.resume_file_name ?? "Resume";
+                const deleting = deletingId === m.id;
+                const hasJob = !!(m.company_name || m.job_title || m.jd_url || jdRecord);
                 return (
-                  <TableRow key={match.id} className={cn(isDeleting && "opacity-50")}>
-                    <TableCell className="font-medium max-w-40">
+                  <tr key={m.id} className={cn("align-top", deleting && "opacity-50")}>
+                    <td className="max-w-0 py-3 pr-4">
                       {resume ? (
                         <button
+                          type="button"
                           onClick={() =>
-                            setPreviewResume({
+                            setResumeTarget({
                               id: resume.id,
                               fileName: resume.file_name ?? fileName,
                               mimeType: resume.mime_type,
                             })
                           }
-                          className="flex items-center gap-1.5 text-left group"
-                          title="Preview resume"
+                          className="block max-w-full truncate rounded-sm text-left text-base font-semibold underline decoration-border decoration-2 underline-offset-4 hover:decoration-foreground"
+                          title="Preview this resume"
                         >
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-emerald-500 transition-colors" />
-                          <span className="block truncate text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 underline decoration-dotted underline-offset-2 transition-colors">
-                            {fileName}
-                          </span>
+                          {fileName}
                         </button>
                       ) : (
-                        <span className="block truncate text-sm">{fileName}</span>
+                        <span className="block truncate text-base font-semibold">{fileName}</span>
                       )}
-                    </TableCell>
-                    <TableCell className="max-w-50">
-                      {jdRecord || match.jd_url ? (
+                      <span className="block truncate text-sm text-muted-foreground md:hidden">
+                        {[m.job_title ?? m.company_name, formatDate(m.created_at)].filter(Boolean).join(" · ")}
+                      </span>
+                    </td>
+                    <td className="hidden max-w-0 py-3 pr-4 md:table-cell">
+                      {hasJob ? (
                         <button
-                          onClick={() => {
-                            const rawUrl = match.jd_url ?? jdRecord?.jd_url ?? undefined;
-                            setViewJd({
+                          type="button"
+                          onClick={() =>
+                            setJdTarget({
                               jd: jdRecord?.jd_object ?? null,
-                              jdUrl: rawUrl && isValidUrl(rawUrl) ? rawUrl : undefined,
-                            });
-                          }}
-                          className="group text-left min-w-0 w-full"
-                          title="Preview job description"
+                              url: safeUrl(m.jd_url ?? jdRecord?.jd_url),
+                            })
+                          }
+                          className="block w-full min-w-0 rounded-sm text-left"
+                          title="Read the job posting"
                         >
-                          {match.company_name || match.job_title ? (
-                            <div className="min-w-0">
-                              <span className="block truncate text-xs font-medium group-hover:text-emerald-600 dark:group-hover:text-emerald-400 underline decoration-dotted underline-offset-2 transition-colors">
-                                {match.company_name}
-                              </span>
-                              <span className="block truncate text-xs text-muted-foreground">
-                                {match.job_title}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="block truncate text-xs text-muted-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 underline decoration-dotted underline-offset-2 transition-colors">
-                              {match.jd_url}
+                          <span className="block truncate text-base underline decoration-border decoration-2 underline-offset-4 hover:decoration-foreground">
+                            {m.job_title ?? m.company_name ?? m.jd_url}
+                          </span>
+                          {m.job_title && m.company_name && (
+                            <span className="block truncate text-sm text-muted-foreground">
+                              {m.company_name}
                             </span>
                           )}
                         </button>
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">
+                          <span aria-hidden>{"–"}</span>
+                          <span className="sr-only">No posting kept</span>
+                        </span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`text-xs font-semibold ${scoreBadgeClass(score)}`}
-                      >
+                    </td>
+                    <td className="py-3 pr-4 text-right">
+                      <span className={cn("text-lg font-bold tabular-nums", SCORE_TEXT[band.tone])}>
                         {score}%
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {match.created_at ? formatDate(match.created_at) : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => setViewMatchId(match.id)}
-                      >
-                        View Report
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-red-600 dark:hover:text-red-500"
-                        onClick={() => setPendingDelete(match)}
-                        disabled={isDeleting}
-                        title="Delete"
-                      >
-                        {isDeleting ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                      </span>
+                      <span className="block text-sm text-muted-foreground">{band.label}</span>
+                    </td>
+                    <td className="hidden py-3 pr-4 text-sm text-muted-foreground md:table-cell">
+                      {formatDate(m.created_at)}
+                    </td>
+                    <td className="py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button asChild size="sm" variant="outline">
+                          <Link
+                            href={`/dashboard/reports/${m.id}`}
+                            aria-label={`Open the report for ${fileName}`}
+                          >
+                            Open report
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-pencil"
+                          onClick={() => setPendingDelete(m)}
+                          disabled={deleting}
+                          aria-label={`Delete the analysis for ${fileName}`}
+                        >
+                          {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
                 );
               })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+            </tbody>
+          </table>
+        </ScrollRegion>
+      ))}
+        </TabsContent>
+      ))}
 
-      {/* Job Description Preview Dialog */}
-      <Dialog open={!!viewJd} onOpenChange={(open) => !open && setViewJd(null)}>
-        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-base font-semibold">
-              {viewJd?.jd?.job_title ?? "Job Description"}
-            </DialogTitle>
-          </DialogHeader>
-          {viewJd && (() => {
-            const jd = viewJd.jd;
-            return (
-            <div className="space-y-5 pt-1">
-              {/* Header info */}
-              {(jd || viewJd.jdUrl) && (
-                <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-2">
-                  {jd?.job_title && (
-                    <h2 className="text-lg font-semibold">{jd.job_title}</h2>
-                  )}
-                  <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-                    {jd?.company_name && (
-                      <span className="flex items-center gap-1.5">
-                        <Building2 className="h-3.5 w-3.5" /> {jd.company_name}
-                      </span>
-                    )}
-                    {jd?.location && (
-                      <span className="flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5" /> {jd.location}
-                      </span>
-                    )}
-                    {jd?.employment_type && (
-                      <span className="flex items-center gap-1.5">
-                        <Briefcase className="h-3.5 w-3.5" /> {jd.employment_type}
-                      </span>
-                    )}
-                  </div>
-                  {viewJd.jdUrl && (
-                    <a
-                      href={viewJd.jdUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:underline mt-1"
-                    >
-                      <ExternalLink className="h-3 w-3" /> {viewJd.jdUrl}
-                    </a>
-                  )}
-                </div>
-              )}
-
-              {/* Description */}
-              {jd?.description && (
-                <div>
-                  <h3 className="text-sm font-semibold mb-2">Description</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-                    {jd.description}
-                  </p>
-                </div>
-              )}
-
-              {/* Responsibilities */}
-              {jd?.responsibilities && jd.responsibilities.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold mb-2">Responsibilities</h3>
-                  <ul className="space-y-1.5">
-                    {jd.responsibilities.map((r, i) => (
-                      <li key={i} className="flex gap-2 text-sm text-muted-foreground">
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-                        {r}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Requirements */}
-              {jd?.requirements && jd.requirements.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold mb-2">Requirements</h3>
-                  <ul className="space-y-1.5">
-                    {jd.requirements.map((r, i) => (
-                      <li key={i} className="flex gap-2 text-sm text-muted-foreground">
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-                        {r}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Benefits */}
-              {jd?.benefits && jd.benefits.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold mb-2">Benefits</h3>
-                  <ul className="space-y-1.5">
-                    {jd.benefits.map((b, i) => (
-                      <li key={i} className="flex gap-2 text-sm text-muted-foreground">
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-                        {b}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Fallback: no structured data and no URL */}
-              {!jd && !viewJd.jdUrl && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No job details available.
-                </p>
-              )}
-            </div>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
-
-      <ResumePreviewDialog target={previewResume} onClose={() => setPreviewResume(null)} />
-
-      <MatchDetailDialog matchId={viewMatchId} onClose={() => setViewMatchId(null)} />
+      <ResumePreviewDialog target={resumeTarget} onClose={() => setResumeTarget(null)} />
+      <JdPreviewDialog target={jdTarget} onClose={() => setJdTarget(null)} />
 
       <AlertDialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this analysis?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the match analysis
-              {pendingDelete?.resume_file_name ? ` for "${pendingDelete.resume_file_name}"` : ""}.
-              Your resume and job description are kept. The credit spent on this analysis
-              isn&apos;t returned. This action cannot be undone.
+              The report
+              {pendingDelete?.resume_file_name ? ` for “${pendingDelete.resume_file_name}”` : ""}
+              , with any bullets and cover letters made from it, will be erased. Your resume
+              and the job posting are kept. The credit it cost is not returned. This cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={() => {
                 if (pendingDelete) {
-                  handleDelete(pendingDelete);
+                  remove(pendingDelete);
                   setPendingDelete(null);
                 }
               }}
             >
-              Delete
+              Delete analysis
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </Tabs>
+  );
+}
+
+function SortHeader({
+  label,
+  field,
+  active,
+  dir,
+  onSort,
+  className,
+}: {
+  label: string;
+  field: SortField;
+  active: SortField;
+  dir: SortDir;
+  onSort: (f: SortField) => void;
+  className?: string;
+}) {
+  const current = active === field;
+  const Icon = !current ? ArrowUpDown : dir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <th
+      scope="col"
+      aria-sort={current ? (dir === "asc" ? "ascending" : "descending") : "none"}
+      className={cn("py-2 pr-4 font-semibold", className)}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="inline-flex min-h-11 items-center gap-1 rounded-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-0"
+      >
+        {label}
+        <Icon className="size-3.5" aria-hidden />
+      </button>
+    </th>
   );
 }

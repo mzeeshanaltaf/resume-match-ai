@@ -2,25 +2,46 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { authClient, useSession, signOut } from "@/lib/auth-client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { Loader2, LogOut } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useHasPassword } from "./use-has-password";
+
+function Field({
+  id,
+  label,
+  hint,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="text-sm font-semibold">
+        {label}
+      </label>
+      {children}
+      {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
 
 export function ProfileSection() {
   const router = useRouter();
   const { data: session, isPending } = useSession();
+  const hasPassword = useHasPassword();
 
   const [name, setName] = useState("");
   const [savingName, setSavingName] = useState(false);
-
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
-
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
@@ -35,10 +56,10 @@ export function ProfileSection() {
     const { error } = await authClient.updateUser({ name: name.trim() });
     setSavingName(false);
     if (error) {
-      toast.error(error.message ?? "Failed to update name.");
+      toast.error(error.message ?? "Your name could not be saved.");
       return;
     }
-    toast.success("Profile updated.");
+    toast.success("Name saved.");
     router.refresh();
   }
 
@@ -52,12 +73,12 @@ export function ProfileSection() {
     });
     setSavingPassword(false);
     if (error) {
-      toast.error(error.message ?? "Failed to change password.");
+      toast.error(error.message ?? "Your password could not be changed.");
       return;
     }
     setCurrentPassword("");
     setNewPassword("");
-    toast.success("Password changed.");
+    toast.success("Password changed. Other devices were signed out.");
   }
 
   async function handleSignOut() {
@@ -67,57 +88,50 @@ export function ProfileSection() {
     router.refresh();
   }
 
-  return (
-    <div className="max-w-lg space-y-6">
-      {/* Profile */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Profile</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleUpdateName} className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="profile-email" className="text-sm font-medium">
-                Email
-              </label>
-              <Input id="profile-email" value={email} disabled readOnly />
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="profile-name" className="text-sm font-medium">
-                Name
-              </label>
-              <Input
-                id="profile-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
-                disabled={isPending}
-                maxLength={60}
-              />
-            </div>
-            <Button
-              type="submit"
-              disabled={savingName || isPending || !name.trim()}
-              className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
-            >
-              {savingName && <Loader2 className="h-4 w-4 animate-spin" />}
-              Save changes
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+  if (isPending) {
+    return (
+      <div className="max-w-lg space-y-6" aria-busy="true" aria-label="Loading your profile">
+        <Skeleton className="h-6 w-24" />
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+      </div>
+    );
+  }
 
-      {/* Change password */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Change password</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleChangePassword} className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="current-password" className="text-sm font-medium">
-                Current password
-              </label>
+  return (
+    <div className="max-w-lg space-y-10">
+      <section aria-labelledby="profile-heading">
+        <h2 id="profile-heading" className="text-lg font-semibold">
+          Profile
+        </h2>
+        <form onSubmit={handleUpdateName} className="mt-4 space-y-4">
+          <Field id="profile-email" label="Email" hint="This is how you sign in. It cannot be changed here.">
+            <Input id="profile-email" value={email} disabled readOnly />
+          </Field>
+          <Field id="profile-name" label="Name">
+            <Input
+              id="profile-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              maxLength={60}
+              autoComplete="name"
+            />
+          </Field>
+          <Button type="submit" disabled={savingName || !name.trim() || name.trim() === session?.user.name}>
+            {savingName && <Loader2 className="animate-spin" />}
+            Save name
+          </Button>
+        </form>
+      </section>
+
+      {hasPassword !== false && (
+        <section aria-labelledby="password-heading" className="border-t border-border pt-8">
+          <h2 id="password-heading" className="text-lg font-semibold">
+            Password
+          </h2>
+          <form onSubmit={handleChangePassword} className="mt-4 space-y-4">
+            <Field id="current-password" label="Current password">
               <Input
                 id="current-password"
                 type="password"
@@ -126,11 +140,8 @@ export function ProfileSection() {
                 autoComplete="current-password"
                 required
               />
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="new-password" className="text-sm font-medium">
-                New password
-              </label>
+            </Field>
+            <Field id="new-password" label="New password" hint="At least 8 characters.">
               <Input
                 id="new-password"
                 type="password"
@@ -140,35 +151,29 @@ export function ProfileSection() {
                 minLength={8}
                 required
               />
-            </div>
+            </Field>
             <Button
               type="submit"
               variant="outline"
               disabled={savingPassword || !currentPassword || newPassword.length < 8}
-              className="gap-2"
             >
-              {savingPassword && <Loader2 className="h-4 w-4 animate-spin" />}
-              Update password
+              {savingPassword && <Loader2 className="animate-spin" />}
+              Change password
             </Button>
           </form>
+        </section>
+      )}
 
-          <Separator className="my-6" />
-
-          <Button
-            variant="ghost"
-            onClick={handleSignOut}
-            disabled={signingOut}
-            className="gap-2 text-muted-foreground"
-          >
-            {signingOut ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <LogOut className="h-4 w-4" />
-            )}
-            Sign out
-          </Button>
-        </CardContent>
-      </Card>
+      <section aria-labelledby="session-heading" className="border-t border-border pt-8">
+        <h2 id="session-heading" className="text-lg font-semibold">
+          This device
+        </h2>
+        <p className="mt-1 text-base text-muted-foreground">Sign out of ResuMatchAI on this browser.</p>
+        <Button variant="outline" className="mt-4" onClick={handleSignOut} disabled={signingOut}>
+          {signingOut ? <Loader2 className="animate-spin" /> : <LogOut />}
+          Sign out
+        </Button>
+      </section>
     </div>
   );
 }

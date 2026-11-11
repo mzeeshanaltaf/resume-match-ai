@@ -1,72 +1,86 @@
 "use client";
 
+import { Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useDashboardData } from "@/contexts/dashboard-data";
-import { HistoryTable } from "@/components/dashboard/history/history-table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { useDashboardData } from "@/contexts/dashboard-data";
+import { ErrorNote } from "@/components/dashboard/notes";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { HistoryTable } from "@/components/dashboard/history/history-table";
 
-export default function HistoryPage() {
-  const { matches, resumes, jds, loading, error } = useDashboardData();
+function HistoryContent() {
+  const { matches, resumes, jds, loading, error, refreshAll } = useDashboardData();
   const searchParams = useSearchParams();
   const defaultTab = searchParams.get("tab") === "screener" ? "screener" : "job_fit";
 
-  if (loading) {
+  if (loading) return <HistorySkeleton />;
+
+  if (!matches) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-32" />
-            <Skeleton className="h-4 w-56" />
-          </div>
-          <Skeleton className="h-9 w-32 rounded-md" />
-        </div>
-        <Skeleton className="h-9 w-72 rounded-md" />
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="border-b border-border px-4 py-3 flex gap-4">
-            {["w-32", "w-48", "w-20", "w-24", "w-16"].map((w, i) => (
-              <Skeleton key={i} className={`h-4 ${w}`} />
-            ))}
-          </div>
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="border-b border-border last:border-0 px-4 py-4 flex gap-4 items-center">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-5 w-14 rounded-full" />
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-8 w-16 rounded-md" />
-            </div>
-          ))}
-        </div>
-      </div>
+      <ErrorNote
+        title="Your history did not load"
+        actions={
+          <Button size="sm" variant="outline" onClick={() => refreshAll()}>
+            Try again
+          </Button>
+        }
+      >
+        {error ?? "Something went wrong while loading your analyses."}
+      </ErrorNote>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">History</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            All your past resume match analyses.
-          </p>
-        </div>
-        <Button
-          asChild
-          size="sm"
-          className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
-        >
-          <Link href="/dashboard/match">
-            New analysis <ArrowRight className="h-4 w-4" />
-          </Link>
-        </Button>
+    <>
+      {error && <ErrorNote title="Some of this may be out of date">{error}</ErrorNote>}
+      <HistoryTable
+        matches={matches}
+        resumes={resumes ?? []}
+        jds={jds ?? []}
+        defaultTab={defaultTab}
+      />
+    </>
+  );
+}
+
+export default function HistoryPage() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-6">
+      <PageHeader
+        title="History"
+        description="Every analysis you have run. Open one to read the full report."
+        actions={
+          <Button asChild>
+            <Link href="/dashboard/match">New analysis</Link>
+          </Button>
+        }
+      />
+      {/* useSearchParams needs a boundary; keeping it here keeps the shell out of it. */}
+      <Suspense fallback={<HistorySkeleton />}>
+        <HistoryContent />
+      </Suspense>
+    </div>
+  );
+}
+
+function HistorySkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading your history" className="space-y-4">
+      <div className="flex justify-between gap-4">
+        <Skeleton className="h-9 w-56" />
+        <Skeleton className="h-9 w-72" />
       </div>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <HistoryTable matches={matches ?? []} resumes={resumes ?? []} jds={jds ?? []} defaultTab={defaultTab} />
+      <div className="space-y-px">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className="flex items-center gap-6 border-b border-border py-4">
+            <Skeleton className="h-5 w-44" />
+            <Skeleton className="h-5 w-52" />
+            <Skeleton className="ml-auto h-8 w-24" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

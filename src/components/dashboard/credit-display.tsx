@@ -1,19 +1,28 @@
 "use client";
 
-import { Zap } from "lucide-react";
+import Link from "next/link";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardData } from "@/contexts/dashboard-data";
+import { cn } from "@/lib/utils";
 
+/** The balance, always in view, linking to the ledger. Red only when it is empty. */
 export function CreditDisplay() {
-  const { creditBalance } = useDashboardData();
+  const { creditBalance, loading } = useDashboardData();
 
-  if (creditBalance === null) return null;
+  if (creditBalance === null) {
+    return loading ? <Skeleton className="h-5 w-16" /> : null;
+  }
 
   return (
-    <div className="flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1">
-      <Zap className="h-3 w-3 text-emerald-500" />
-      <span className="text-xs font-medium tabular-nums">
+    <Link
+      href="/dashboard/settings?tab=credits"
+      className="flex min-h-11 items-baseline gap-1.5 rounded-md px-2 py-2 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring md:min-h-9"
+      aria-label={`${creditBalance} ${creditBalance === 1 ? "credit" : "credits"} left. Open your credit history.`}
+    >
+      <span className={cn("text-base font-bold tabular-nums", creditBalance === 0 && "text-pencil")}>
         {creditBalance}
       </span>
-    </div>
+      <span className="text-muted-foreground">{creditBalance === 1 ? "credit" : "credits"}</span>
+    </Link>
   );
 }

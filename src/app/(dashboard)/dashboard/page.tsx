@@ -1,197 +1,252 @@
 "use client";
 
-import { useSession } from "@/lib/auth-client";
-import { useDashboardData } from "@/contexts/dashboard-data";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useMemo } from "react";
 import Link from "next/link";
-import {
-  FileSearch,
-  FileText,
-  Briefcase,
-  ArrowRight,
-  BarChart3,
-} from "lucide-react";
+import { ArrowRight, ScanSearch, Target } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useDashboardData } from "@/contexts/dashboard-data";
+import type { CreditTransaction, MatchListItem } from "@/lib/api/types";
+import { formatDate, plural, signed } from "@/lib/format";
+import { SCORE_TEXT, scoreBand } from "@/lib/score";
+import { cn } from "@/lib/utils";
+import { ErrorNote } from "@/components/dashboard/notes";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { ScrollRegion } from "@/components/dashboard/scroll-region";
 
-function scoreColor(score: number) {
-  if (score >= 75) return "text-emerald-600 dark:text-emerald-400";
-  if (score >= 50) return "text-yellow-600 dark:text-yellow-400";
-  return "text-red-500 dark:text-red-400";
+/** Net credits an analysis cost, read from the ledger (a refund cancels the charge). */
+function creditsFor(matchId: string, ledger: CreditTransaction[] | null): number | null {
+  if (!ledger) return null;
+  const rows = ledger.filter((t) => t.reference_id === matchId);
+  return rows.length ? rows.reduce((sum, t) => sum + t.credits_delta, 0) : null;
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function postingLine(m: MatchListItem) {
+  const parts = [m.job_title, m.company_name].filter(Boolean);
+  return parts.length ? parts.join(", ") : (m.jd_url ?? "Job posting");
 }
 
-export default function DashboardPage() {
-  const { data: session } = useSession();
-  const firstName = session?.user.name?.trim().split(/\s+/)[0];
-  const { overview, credits, loading, error } = useDashboardData();
+export default function OverviewPage() {
+  const { overview, creditBalance, creditHistory, loading, error, refreshAll } =
+    useDashboardData();
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-56" />
-          <Skeleton className="h-4 w-72" />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="rounded-lg border border-border p-6 space-y-3">
-              <div className="flex justify-between">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-4 w-4 rounded" />
-              </div>
-              <Skeleton className="h-8 w-16" />
-            </div>
-          ))}
-        </div>
-        <div className="rounded-lg border border-border p-6 space-y-4">
-          <Skeleton className="h-5 w-36" />
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex items-center justify-between py-2">
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-4 w-4 rounded" />
-                <div className="space-y-1">
-                  <Skeleton className="h-4 w-40" />
-                  <Skeleton className="h-3 w-56" />
-                </div>
-              </div>
-              <Skeleton className="h-4 w-12" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
+  const recent = overview?.recent_matches ?? [];
   const counts = overview?.counts;
-  const recentMatches = overview?.recent_matches ?? [];
-  const matchCost = credits?.costs.match ?? 1;
+  const outOfCredits = creditBalance === 0;
 
-  const stats = [
-    {
-      label: "Resumes",
-      value: String(counts?.resumes ?? 0),
-      icon: FileText,
-    },
-    {
-      label: "Job Descriptions",
-      value: String(counts?.job_descriptions ?? 0),
-      icon: Briefcase,
-    },
-    {
-      label: "Analyses",
-      value: String(counts?.matches ?? 0),
-      icon: BarChart3,
-    },
-  ];
+  const summary = useMemo(() => {
+    if (!counts) return undefined;
+    return `${plural(counts.resumes, "resume")}, ${plural(counts.job_descriptions, "job posting")} and ${plural(counts.matches, "analysis", "analyses")} so far.`;
+  }, [counts]);
 
   return (
-    <div className="space-y-6">
-      {/* Welcome */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Welcome back, {firstName ?? "there"}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Here&apos;s an overview of your resume match activity.
-        </p>
+    <div className="mx-auto max-w-5xl space-y-8">
+      <PageHeader
+        title="Overview"
+        description={summary}
+        actions={
+          <>
+            <Button asChild>
+              <Link href="/dashboard/match">
+                <Target /> Check a resume
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/screen">
+                <ScanSearch /> Screen resumes
+              </Link>
+            </Button>
+          </>
+        }
+      />
+
+      {outOfCredits && (
+        <ErrorNote
+          title="You are out of credits"
+          actions={
+            <>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/dashboard/settings?tab=credits">See your credits</Link>
+              </Button>
+              <Button asChild size="sm" variant="ghost">
+                <Link href="/contact">Ask about more</Link>
+              </Button>
+            </>
+          }
+        >
+          New analyses need credits. Uploading resumes, adding postings and reading your
+          reports still work.
+        </ErrorNote>
+      )}
+
+      {error && !overview && (
+        <ErrorNote
+          title="Your overview did not load"
+          actions={
+            <Button size="sm" variant="outline" onClick={() => refreshAll()}>
+              Try again
+            </Button>
+          }
+        >
+          {error}
+        </ErrorNote>
+      )}
+
+      {loading && <LedgerSkeleton />}
+
+      {!loading && overview && recent.length === 0 && <FirstRun />}
+
+      {!loading && recent.length > 0 && (
+        <section aria-labelledby="recent-heading">
+          <div className="flex items-end justify-between gap-4">
+            <h2 id="recent-heading" className="text-lg font-semibold">
+              Recent analyses
+            </h2>
+            <Link
+              href="/dashboard/history"
+              className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold underline underline-offset-4 md:min-h-0"
+            >
+              All of History <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          </div>
+
+          <ScrollRegion label="Table of recent analyses" className="mt-2">
+            <table className="w-full min-w-[30rem] border-collapse text-left">
+              <caption className="sr-only">
+                Your most recent analyses, with the score, the credits each one cost and a link to the report
+              </caption>
+              <thead>
+                <tr className="border-b-2 border-foreground text-sm">
+                  <th scope="col" className="py-2 pr-4 font-semibold">
+                    Resume and job
+                  </th>
+                  <th scope="col" className="w-24 py-2 pr-4 text-right font-semibold">
+                    Score
+                  </th>
+                  <th scope="col" className="hidden w-24 py-2 pr-4 text-right font-semibold sm:table-cell">
+                    Credits
+                  </th>
+                  <th scope="col" className="w-36 py-2 text-right font-semibold">
+                    Next
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {recent.map((m) => {
+                  const score = m.overall_score_percent ?? 0;
+                  const band = scoreBand(score);
+                  const credits = creditsFor(m.id, creditHistory);
+                  return (
+                    <tr key={m.id} className="align-top">
+                      <td className="max-w-0 py-3 pr-4">
+                        <p className="truncate text-base font-semibold">
+                          {m.resume_file_name ?? "Resume"}
+                        </p>
+                        <p className="truncate text-sm text-muted-foreground">{postingLine(m)}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {m.mode === "recruiter" ? "Screener" : "Job Fit"}
+                          {m.created_at && <> · {formatDate(m.created_at)}</>}
+                        </p>
+                      </td>
+                      <td className="py-3 pr-4 text-right">
+                        <span className={cn("text-lg font-bold tabular-nums", SCORE_TEXT[band.tone])}>
+                          {score}%
+                        </span>
+                        <span className="block text-sm text-muted-foreground">{band.label}</span>
+                      </td>
+                      <td className="hidden py-3 pr-4 text-right text-base tabular-nums sm:table-cell">
+                        {credits === null ? (
+                          <span className="text-muted-foreground">
+                            <span aria-hidden>{"–"}</span>
+                            <span className="sr-only">not in the recent ledger</span>
+                          </span>
+                        ) : credits === 0 ? (
+                          <span className="text-muted-foreground">returned</span>
+                        ) : (
+                          <span className="font-semibold">{signed(credits)}</span>
+                        )}
+                      </td>
+                      <td className="py-3 text-right">
+                        <Button asChild size="sm" variant="outline">
+                          <Link
+                            href={`/dashboard/reports/${m.id}`}
+                            aria-label={`Open the report for ${m.resume_file_name ?? "this resume"}`}
+                          >
+                            Open report <ArrowRight />
+                          </Link>
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </ScrollRegion>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/** First visit: say what each desk is for and what it costs, then get out of the way. */
+function FirstRun() {
+  const { credits } = useDashboardData();
+  const match = credits?.costs.match ?? 1;
+  const perResume = credits?.costs.screening_per_resume ?? 1;
+  return (
+    <section aria-labelledby="first-run" className="border-t border-border pt-8">
+      <h2 id="first-run" className="text-lg font-semibold">
+        Nothing analyzed yet
+      </h2>
+      <p className="mt-1 max-w-prose text-base text-muted-foreground">
+        Uploading resumes and adding job postings is free. You spend a credit only when
+        something is analyzed, and the price is shown first.
+      </p>
+      <div className="mt-6 grid gap-8 md:grid-cols-2 md:divide-x md:divide-border">
+        <div className="max-w-sm space-y-2 md:pr-8">
+          <h3 className="font-semibold">You have a resume and a job you want</h3>
+          <p className="text-base text-muted-foreground">
+            See what already matches, what is missing, and which lines to reword before you
+            apply. {plural(match, "credit")} per analysis.
+          </p>
+          <Button asChild className="mt-2">
+            <Link href="/dashboard/match">
+              Start Job Fit <ArrowRight />
+            </Link>
+          </Button>
+        </div>
+        <div className="max-w-sm space-y-2 md:pl-8">
+          <h3 className="font-semibold">You have a stack of resumes and one opening</h3>
+          <p className="text-base text-muted-foreground">
+            Get them ranked, with a short reason for each position. {plural(perResume, "credit")}{" "}
+            per resume; a resume that cannot be read is refunded.
+          </p>
+          <Button asChild variant="outline" className="mt-2">
+            <Link href="/dashboard/screen">
+              Start the Screener <ArrowRight />
+            </Link>
+          </Button>
+        </div>
       </div>
+    </section>
+  );
+}
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {stats.map(({ label, value, icon: Icon }) => (
-          <Card key={label}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {label}
-              </CardTitle>
-              <Icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">{value}</p>
-            </CardContent>
-          </Card>
+function LedgerSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading your analyses" className="space-y-4">
+      <Skeleton className="h-6 w-40" />
+      <div className="space-y-px">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center justify-between gap-6 border-b border-border py-4">
+            <div className="space-y-2">
+              <Skeleton className="h-5 w-56 max-w-full" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+            <Skeleton className="h-8 w-28" />
+          </div>
         ))}
       </div>
-
-      {/* Recent matches or empty state */}
-      {recentMatches.length > 0 ? (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Recent Analyses</CardTitle>
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/dashboard/history">View all</Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ul className="divide-y divide-border">
-              {recentMatches.map((match) => (
-                <li
-                  key={match.id}
-                  className="flex items-center justify-between px-6 py-3"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {match.resume_file_name ?? "Unknown"}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {match.company_name && match.job_title
-                          ? `${match.company_name} — ${match.job_title}`
-                          : match.company_name || match.job_title || match.jd_url || "—"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="ml-4 shrink-0 text-right">
-                    <p
-                      className={`text-sm font-bold ${scoreColor(match.overall_score_percent ?? 0)}`}
-                    >
-                      {match.overall_score_percent ?? 0}%
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {match.created_at ? formatDate(match.created_at) : "—"}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center py-14 text-center">
-            <FileSearch className="mb-4 h-12 w-12 text-muted-foreground/50" />
-            <h3 className="mb-2 text-lg font-semibold">
-              Run your first resume analysis
-            </h3>
-            <p className="mb-6 max-w-sm text-sm text-muted-foreground">
-              Upload your resume and paste a job description to get an instant
-              AI match score and personalised recommendations.
-            </p>
-            <div className="flex items-center gap-2">
-              <Button asChild className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400">
-                <Link href="/dashboard/match">
-                  Start matching <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-            <Badge variant="secondary" className="mt-4">
-              {matchCost} credit per analysis · uploads are free
-            </Badge>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

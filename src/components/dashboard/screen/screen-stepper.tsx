@@ -1,358 +1,191 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle2, ArrowLeft, ScanSearch } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { useDashboardData } from "@/contexts/dashboard-data";
-import { api, isApiError, waitForJob } from "@/lib/api/client";
-import { describeError } from "@/lib/api/errors";
-import type { JobDescriptionJobResult, JobStep, ScreeningResult } from "@/lib/api/types";
-import { MultiResumePicker } from "./multi-resume-picker";
+import { api, isAbortError, waitForJob } from "@/lib/api/client";
+import { MAX_SCREENING_RESUMES } from "@/lib/api/limits";
+import type { JobStep, ScreeningResult } from "@/lib/api/types";
+import { plural } from "@/lib/format";
+import { CostLedger } from "@/components/dashboard/cost-ledger";
+import { NoCredits, RequestError } from "@/components/dashboard/notes";
+import { StepList } from "@/components/dashboard/step-list";
+import { FlowSteps } from "@/components/dashboard/flow/flow-steps";
+import { JobPostingStep } from "@/components/dashboard/flow/job-posting-step";
+import { useJobPosting } from "@/components/dashboard/flow/use-job-posting";
+import { MultiResumePicker } from "@/components/dashboard/flow/resume-picker";
 import { ScreenResults } from "./screen-results";
-import { ShimmeringProgressDialog } from "@/components/dashboard/shimmering-progress-dialog";
 
 type Step = 1 | 2 | 3 | 4;
 
-const STEPS = [
-  { id: 1, label: "Resumes" },
-  { id: 2, label: "Job description" },
-  { id: 3, label: "Screening" },
-  { id: 4, label: "Results" },
-];
+const STEPS = ["Resumes", "Job posting", "Screen", "Ranking"];
 
-/** Progress text for a screening run: its steps are one `score:<id>` per resume, then `ranking`. */
-function screeningMessage(steps: JobStep[], total: number): string | undefined {
+/** Heading for a screening run: its steps are one `score:<id>` per resume, then `ranking`. */
+function progressHeading(steps: JobStep[], total: number): string {
+  if (steps.some((s) => s.name === "ranking")) return "Ranking the candidates";
   const scoring = steps.filter((s) => s.name.startsWith("score:"));
-  if (steps.some((s) => s.name === "ranking")) return "Ranking candidates…";
-  if (scoring.length === 0) return undefined;
+  if (scoring.length === 0) return "Screening";
   const done = scoring.filter((s) => s.status !== "running").length;
-  return `Scoring resumes (${done} of ${total} done)…`;
+  return `Scoring resumes (${done} of ${total} done)`;
 }
 
+/** The Resume Screener: many resumes, one posting, a ranked pile. */
 export function ScreenStepper() {
   const { refreshAll, credits, creditBalance } = useDashboardData();
-  const [currentStep, setCurrentStep] = useState<Step>(1);
-  // Picker state lifted here so going Back preserves the selection
-  const [pickerSelectedIds, setPickerSelectedIds] = useState<string[]>([]);
-  const [pickerShowUpload, setPickerShowUpload] = useState<boolean | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const posting = useJobPosting("recruiter");
+
+  const [step, setStep] = useState<Step>(1);
+  const [pickedIds, setPickedIds] = useState<string[]>([]);
+  const [showUpload, setShowUpload] = useState<boolean | null>(null);
+  const [resumeIds, setResumeIds] = useState<string[]>([]);
+  const [jdId, setJdId] = useState<string | null>(null);
+
+  const [running, setRunning] = useState(false);
+  const [steps, setSteps] = useState<JobStep[]>([]);
+  const [error, setError] = useState<unknown>(null);
   const [result, setResult] = useState<ScreeningResult | null>(null);
-  const [jdMode, setJdMode] = useState<"url" | "text">("url");
-  const [url, setUrl] = useState("");
-  const [jdText, setJdText] = useState("");
-  const [jdId, setJdId] = useState("");
-  const [processedJdInput, setProcessedJdInput] = useState<{ mode: "url" | "text"; value: string } | null>(null);
-  const [processingJd, setProcessingJd] = useState(false);
-  const [jdSteps, setJdSteps] = useState<JobStep[]>([]);
-  const [screening, setScreening] = useState(false);
-  const [screenSteps, setScreenSteps] = useState<JobStep[]>([]);
-  const [screenError, setScreenError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const perResume = credits?.costs.screening_per_resume ?? 1;
-  const totalCost = selectedIds.length * perResume;
-  const notEnoughCredits = creditBalance !== null && creditBalance < totalCost;
+  const total = resumeIds.length * perResume;
+  const tooFew = creditBalance !== null && creditBalance < total;
 
   function reset() {
-    setCurrentStep(1);
-    setPickerSelectedIds([]);
-    setPickerShowUpload(null);
-    setSelectedIds([]);
+    abortRef.current?.abort();
+    posting.reset();
+    setStep(1);
+    setPickedIds([]);
+    setShowUpload(null);
+    setResumeIds([]);
+    setJdId(null);
+    setRunning(false);
+    setSteps([]);
+    setError(null);
     setResult(null);
-    setJdMode("url");
-    setUrl("");
-    setJdText("");
-    setJdId("");
-    setProcessedJdInput(null);
-    setProcessingJd(false);
-    setJdSteps([]);
-    setScreening(false);
-    setScreenSteps([]);
-    setScreenError(null);
   }
 
-  async function processJd() {
-    const currentValue = jdMode === "url" ? url.trim() : jdText.trim();
-
-    if (jdMode === "url") {
-      if (!url.trim()) {
-        toast.error("Please enter a job posting URL.");
-        return;
-      }
-      try {
-        new URL(url.trim());
-      } catch {
-        toast.error("Please enter a valid URL.");
-        return;
-      }
-    } else {
-      if (!jdText.trim()) {
-        toast.error("Please paste the job description text.");
-        return;
-      }
-    }
-
-    // Skip reprocessing if the same JD was already processed successfully
-    if (jdId && processedJdInput?.mode === jdMode && processedJdInput?.value === currentValue) {
-      setScreenError(null);
-      setCurrentStep(3);
-      return;
-    }
-
-    setProcessingJd(true);
-    setJdSteps([]);
-    const accept = (id: string) => {
-      setJdId(id);
-      setProcessedJdInput({ mode: jdMode, value: currentValue });
-      setScreenError(null);
-      setCurrentStep(3);
-    };
+  async function screen() {
+    if (!jdId) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setRunning(true);
+    setError(null);
+    setSteps([]);
     try {
-      const body =
-        jdMode === "url"
-          ? { url: currentValue, mode: "recruiter" as const }
-          : { text: currentValue, mode: "recruiter" as const };
-      const { job_id } = await api.jobDescriptions.submit(body);
-      const res = await waitForJob<JobDescriptionJobResult>(job_id, { onSteps: setJdSteps });
-      accept(res.jd_id);
-    } catch (err) {
-      // The same posting was added before: reuse it instead of failing.
-      const existing = isApiError(err, "DUPLICATE_JD") ? err.details?.jd_id : null;
-      if (typeof existing === "string") {
-        toast.info("You've already added this job description. Using the existing one.");
-        accept(existing);
-      } else {
-        toast.error(describeError(err, "Failed to process job description."));
-      }
-    } finally {
-      setProcessingJd(false);
-    }
-  }
-
-  async function startScreening() {
-    setScreening(true);
-    setScreenError(null);
-    setScreenSteps([]);
-
-    try {
-      const { job_id } = await api.screenings.create(selectedIds, jdId);
-      const res = await waitForJob<ScreeningResult>(job_id, { onSteps: setScreenSteps });
+      const { job_id } = await api.screenings.create(resumeIds, jdId, controller.signal);
+      const res = await waitForJob<ScreeningResult>(job_id, {
+        onSteps: setSteps,
+        signal: controller.signal,
+      });
       setResult(res);
-      toast.success("Screening complete!");
-      setCurrentStep(4);
+      setStep(4);
     } catch (err) {
-      const msg = describeError(err, "Screening failed.");
-      setScreenError(msg);
-      toast.error(msg);
+      if (isAbortError(err)) return;
+      setError(err);
     } finally {
-      setScreening(false);
-      // Credits were spent (and failed items refunded); history and counts changed.
+      if (!controller.signal.aborted) setRunning(false);
+      // Credits were spent, and any failed resume refunded; history and counts moved.
       refreshAll();
     }
   }
 
   return (
-    <>
-    <ShimmeringProgressDialog
-      open={processingJd}
-      title="Processing Job Description"
-      steps={jdSteps}
-    />
-    <ShimmeringProgressDialog
-      open={screening}
-      title="Screening"
-      steps={screenSteps}
-      total={selectedIds.length + 1}
-      message={screeningMessage(screenSteps, selectedIds.length)}
-    />
     <div className="space-y-8">
-      {/* Step indicator */}
-      <nav aria-label="Progress" className="flex items-center gap-0">
-        {STEPS.map((step, i) => {
-          const done = step.id < currentStep;
-          const active = step.id === currentStep;
-          return (
-            <div key={step.id} className="flex items-center">
-              <div className="flex items-center gap-2">
-                <div
-                  className={cn(
-                    "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors",
-                    done
-                      ? "bg-emerald-600 text-white dark:bg-emerald-500"
-                      : active
-                        ? "border-2 border-emerald-600 dark:border-emerald-500 text-emerald-600 dark:text-emerald-400"
-                        : "border-2 border-border text-muted-foreground"
-                  )}
-                >
-                  {done ? <CheckCircle2 className="h-4 w-4" /> : step.id}
-                </div>
-                <span
-                  className={cn(
-                    "text-sm hidden sm:inline",
-                    active ? "font-semibold text-foreground" : "text-muted-foreground"
-                  )}
-                >
-                  {step.label}
-                </span>
-              </div>
-              {i < STEPS.length - 1 && (
-                <div className={cn("mx-3 h-px w-8 sm:w-12", done ? "bg-emerald-500" : "bg-border")} />
-              )}
-            </div>
-          );
-        })}
-      </nav>
+      <FlowSteps steps={STEPS} current={step} />
 
-      {/* Step content */}
-      <div className="max-w-3xl">
-        {/* Step 1: Upload Resumes */}
-        {currentStep === 1 && (
+      <div className={step === 4 ? "max-w-4xl" : "max-w-2xl"}>
+        {step === 1 && (
           <MultiResumePicker
+            max={MAX_SCREENING_RESUMES}
+            selectedIds={pickedIds}
+            showUpload={showUpload}
+            onSelectedIdsChange={setPickedIds}
+            onShowUploadChange={setShowUpload}
             onNext={(ids) => {
-              setSelectedIds(ids);
-              setCurrentStep(2);
+              setResumeIds(ids);
+              setStep(2);
             }}
-            selectedIds={pickerSelectedIds}
-            showUpload={pickerShowUpload}
-            onSelectedIdsChange={setPickerSelectedIds}
-            onShowUploadChange={setPickerShowUpload}
           />
         )}
 
-        {/* Step 2: Job Description */}
-        {currentStep === 2 && (
-          <div className="space-y-5">
+        {step === 2 && (
+          <JobPostingStep
+            posting={posting}
+            intro={`All ${plural(resumeIds.length, "resume")} are scored against this one posting. Adding it is free.`}
+            onBack={() => setStep(1)}
+            onAdded={(id) => {
+              setJdId(id);
+              setError(null);
+              setStep(3);
+            }}
+          />
+        )}
+
+        {step === 3 && (
+          <section className="space-y-6">
             <div>
-              <h2 className="text-lg font-semibold">Enter job description</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                All {selectedIds.length} resume{selectedIds.length !== 1 ? "s" : ""} will
-                be screened against this job posting.
+              <h2 className="text-lg font-semibold">Ready to screen</h2>
+              <p className="mt-1 text-base text-muted-foreground">
+                {plural(resumeIds.length, "resume")} against{" "}
+                {posting.label ? <strong className="font-semibold">{posting.label}</strong> : "the posting"}.
+                You get a ranked list with a short reason for each position.
               </p>
             </div>
 
-            <div className="flex gap-1 rounded-lg border border-border p-1 w-fit bg-muted/30">
-              <button
-                onClick={() => setJdMode("url")}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  jdMode === "url" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Job URL
-              </button>
-              <button
-                onClick={() => setJdMode("text")}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  jdMode === "text" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Paste text
-              </button>
+            <div className="space-y-2">
+              <CostLedger
+                rows={[
+                  {
+                    label: `${plural(resumeIds.length, "resume")} at ${plural(perResume, "credit")} each`,
+                    amount: -total,
+                  },
+                ]}
+                balance={creditBalance}
+              />
+              <p className="text-sm text-muted-foreground">
+                The cost is reserved up front. A resume that cannot be scored is refunded.
+              </p>
             </div>
 
-            {jdMode === "url" ? (
-              <Input
-                type="url"
-                placeholder="https://company.com/careers/job-title"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && processJd()}
-                className="max-w-lg"
-              />
-            ) : (
-              <Textarea
-                placeholder="Paste the full job description here…"
-                value={jdText}
-                onChange={(e) => setJdText(e.target.value)}
-                rows={8}
-                className="max-w-lg"
+            {tooFew && !running && (
+              <NoCredits needed={total} balance={creditBalance} />
+            )}
+
+            {running && (
+              <StepList
+                heading={progressHeading(steps, resumeIds.length)}
+                steps={steps}
+                note="You can leave this page. The scores will be in History when they finish."
               />
             )}
 
-            <div className="flex gap-2 pt-1">
-              <Button variant="ghost" size="sm" onClick={() => setCurrentStep(1)} className="gap-1">
-                <ArrowLeft className="h-4 w-4" /> Back
-              </Button>
-              <Button
-                onClick={processJd}
-                disabled={(jdMode === "url" ? !url.trim() : !jdText.trim()) || processingJd}
-                className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
-              >
-                <><ScanSearch className="h-4 w-4" /> Process JD</>
+            {error != null && !running && (
+              <RequestError
+                error={error}
+                title="The screening did not finish"
+                fallback="The screening did not finish."
+              />
+            )}
 
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={() => setStep(2)} disabled={running}>
+                <ArrowLeft /> Back
+              </Button>
+              <Button onClick={screen} disabled={running || tooFew}>
+                {running
+                  ? "Screening"
+                  : error != null
+                    ? "Try again"
+                    : `Screen (${plural(total, "credit")})`}
               </Button>
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Step 3: Screening */}
-        {currentStep === 3 && (
-          <div className="flex flex-col items-center py-12 text-center">
-            {screenError ? (
-              <>
-                <h2 className="text-lg font-semibold text-destructive">Screening failed</h2>
-                <p className="mt-2 text-sm text-muted-foreground">{screenError}</p>
-                <div className="mt-6 flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setCurrentStep(2)} className="gap-1">
-                    <ArrowLeft className="h-4 w-4" /> Back
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => setScreenError(null)}
-                    className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
-                  >
-                    Retry
-                  </Button>
-                </div>
-              </>
-            ) : screening ? (
-              /* ShimmeringProgressDialog handles UX during screening */
-              null
-            ) : (
-              <>
-                <ScanSearch className="mb-4 h-10 w-10 text-emerald-500" />
-                <h2 className="text-lg font-semibold">Ready to screen</h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {selectedIds.length} resume{selectedIds.length !== 1 ? "s" : ""} will be screened against the job description.
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  This costs {totalCost} credit{totalCost === 1 ? "" : "s"} ({perResume} per resume)
-                  {creditBalance !== null && <> · you have {creditBalance}</>}. Resumes that fail are
-                  refunded.
-                </p>
-                {notEnoughCredits && (
-                  <p className="mt-2 text-sm text-destructive">
-                    You don&apos;t have enough credits to screen this many resumes. Deselect some
-                    and try again.
-                  </p>
-                )}
-                <div className="mt-6 flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setCurrentStep(2)} className="gap-1">
-                    <ArrowLeft className="h-4 w-4" /> Back
-                  </Button>
-                  <Button
-                    onClick={startScreening}
-                    disabled={notEnoughCredits}
-                    className="gap-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
-                  >
-                    <ScanSearch className="h-4 w-4" /> Start Screening
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Step 4: Results */}
-        {currentStep === 4 && result && (
-          <ScreenResults result={result} onReset={reset} />
-        )}
+        {step === 4 && result && <ScreenResults result={result} onReset={reset} />}
       </div>
     </div>
-    </>
   );
 }

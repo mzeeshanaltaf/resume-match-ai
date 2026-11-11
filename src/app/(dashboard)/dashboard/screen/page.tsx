@@ -1,19 +1,17 @@
+import type { Metadata } from "next";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { ScreenStepper } from "@/components/dashboard/screen/screen-stepper";
+
+export const metadata: Metadata = { title: "Resume Screener" };
 
 export default function ScreenPage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Resume Screener</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Screen multiple resumes against a job description. Get quick scores
-          to shortlist the best candidates.
-        </p>
-      </div>
-
-      <div className="rounded-lg border border-border bg-background p-6">
-        <ScreenStepper />
-      </div>
+    <div className="mx-auto max-w-5xl space-y-8">
+      <PageHeader
+        title="Resume Screener"
+        description="Score a stack of resumes against one job posting and get them ranked, each with a short reason you can check."
+      />
+      <ScreenStepper />
     </div>
   );
 }

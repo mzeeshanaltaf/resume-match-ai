@@ -247,6 +247,31 @@
   }
 }
 
+/*
+ * Printing a report. The shell, tabs and buttons are hidden with `print:hidden`
+ * in the components; this block handles what Tailwind variants cannot:
+ * the proof marks print finished wherever the page was scrolled to (their
+ * draw state lives in inline styles and clip paths), and no theme background
+ * is painted behind the paper.
+ */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+  html,
+  body {
+    background: none !important;
+  }
+  .report-sheet svg path {
+    stroke-dasharray: none !important;
+    stroke-dashoffset: 0 !important;
+    opacity: 1 !important;
+  }
+  .report-sheet [style*="clip-path"] {
+    clip-path: none !important;
+  }
+}
+
 /* Nothing essential depends on animation: collapse it. Proof marks and the
    scroll-linked hero also check the media query in JS and render finished. */
 @media (prefers-reduced-motion: reduce) {

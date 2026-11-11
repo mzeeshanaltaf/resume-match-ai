@@ -38,13 +38,13 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 - Fonts: `src/lib/fonts.ts` (`--font-schibsted` to `font-sans`, `--font-literata` to `font-serif`, `--font-handwriting` to `font-hand`). The root layout applies the first two; `(marketing)/layout.tsx` applies the hand. A page using `font-hand` outside `(marketing)` must wrap itself in `reenieBeanie.variable`.
 - Proof marks: `src/components/proof/` (`Strike`, `Circled`, `Underlined`, `Insert`, `MarginNote`, `ScoreMark`, `ProofStroke`, `useDraw`). Draw via a shared `progress` motion value + `range`, or self-timed (`delay`/`duration`); finished and static under `prefers-reduced-motion`. `surface="page"` when drawn on a `bg-page` sheet.
 - Landing sections live in `src/components/marketing/landing/`; shared `Wordmark`/`LogoMark` in `src/components/brand/`. Long-form legal pages use `LegalPage`.
-- Verification helpers (not in the repo): Playwright + a system Chrome, `axe-core` for contrast. `npm i --no-save playwright-core axe-core`.
+- Verification helpers (scripts in the repo, packages not): Playwright + a system Chrome, `axe-core`. `npm i --no-save playwright-core axe-core`; scripts in `scripts/e2e/` (see its README; Phase 6: `e2e-phase6.mjs`, `shots-phase6.mjs`, `states-phase6.mjs`).
 
 ## Layout & routing
 - Route groups: `(marketing)` public, `(dashboard)` protected
 - `src/app/layout.tsx` — theme provider + gated Umami `<Script>` + Organization JSON-LD (no auth provider needed)
 - Marketing: landing (`page.tsx`), `sign-in`, `sign-up`, `contact`, about/privacy/terms
-- Dashboard: overview, `match` (Job Fit), `screen` (Recruiter screening), `history`, `settings`
+- Dashboard (Phase 6, all on the token system): `page.tsx` overview, `match` (Job Fit), `screen` (Recruiter screening), `history`, `reports/[id]` (the report as a full page), `settings` (profile, credits, account), `help`
 - `src/contexts/dashboard-data.tsx` — `DashboardDataProvider` fetches `/v1/overview`, `/v1/credits` (balance + prices), `/v1/credits/transactions?limit=200`, `/v1/matches`, `/v1/resumes`, `/v1/job-descriptions?limit=500` in parallel; `refreshAll()` after a match/screening/delete, `refreshCredits()` for balance + ledger only; `addResume()` / `removeMatch()` for instant UI updates. Consumed by all dashboard pages. Never hardcode credit prices: use `credits.costs`.
 
 ## Talking to the backend (`src/lib/api/`)
@@ -53,7 +53,11 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 - Long work = `202 {job_id}` → `waitForJob`. Result shapes: resume `{resume_id, resume}`, JD `{jd_id, job_description}`, match `{match_id, match}`, screening `ScreeningResult`.
 - **Modes**: Job Fit uses `candidate` resumes/JDs, the Screener `recruiter` ones (backend `422 MODE_MISMATCH` otherwise). Pickers list existing resumes filtered by mode. Dedup is per mode; a `409 DUPLICATE_RESUME` / `DUPLICATE_JD` is handled by reusing the existing item.
 - Match = 1 credit, screening = 1 per resume (all-or-nothing up front, failed items refunded), upload/JD processing free. Deleting a match keeps the resume and JD. Resume files come from `GET /v1/resumes/{id}/file` on demand (blob → `PdfViewer file={blob}`; DOCX/TXT are download-only).
-- `ShimmeringProgressDialog` is **temporary** blocking progress UI driven by job steps (Phase 6 replaces it with an inline step list).
+- Progress UI: `StepList` (`components/dashboard/step-list.tsx`) is the inline live list fed by `waitForJob({onSteps})`; there is no blocking progress modal any more.
+- Dashboard patterns: `PageHeader`, `ErrorNote` / `NoCredits` / `RequestError` (a `402 INSUFFICIENT_CREDITS` shows the numbers), `CostLedger` (price and balance-after before any spend), `ScrollRegion` (wide tables: focusable, and `relative` so `sr-only` cells cannot widen the page), `flow/` (shared upload, pickers, `useJobPosting`). Scores go through `lib/score.ts`.
+- Report (`components/dashboard/report/`): `Paper` sheet + `Entry` (text left, `MarginNote` right from `xl`, under the text below) + `Marked` (drawn mark for a short phrase, CSS decoration for a long one). Buttons on the sheet use `paperButton` (the sheet stays light in dark mode). Print is CSS: shell `print:hidden`, all tabs print, marks forced finished in `globals.css`. Own tabs component (`report-tabs.tsx`) because Radix hides inactive panels with `[hidden]`, which would not print.
+- Account: Settings > Account. Export = `api.account.export()` (blob; `429 EXPORT_RATE_LIMITED` shown inline). Delete = `authClient.deleteUser({password})`; Google-only users (no `credential` account, via `listAccounts`) send no password and rely on a fresh session (`SESSION_EXPIRED` is explained in the UI). `sendDeleteAccountVerification` stays **unconfigured**: with it set, Better Auth emails a link even when a password is sent.
+- Hydration: `TopNav` renders the mobile `Sheet` only after mount (Radix ids differed server vs client on pages with Suspense boundaries).
 
 ## n8n (contact form only)
 - `src/app/api/contact/route.ts` posts to a hardcoded n8n webhook with `N8N_API_KEY` (honeypot field `hp_field` + Upstash limiter in `src/lib/rate-limit.ts`, fails open). Nothing else in `src/` may reference n8n.

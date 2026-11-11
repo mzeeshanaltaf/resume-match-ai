@@ -67,11 +67,13 @@ src/
 │   │   └── layout.tsx
 │   ├── (dashboard)/          # Protected dashboard pages
 │   │   ├── dashboard/
-│   │   │   ├── page.tsx      # Overview
-│   │   │   ├── match/        # Job Fit Analysis
-│   │   │   ├── screen/       # Resume Screening
+│   │   │   ├── page.tsx      # Overview (ledger of recent analyses)
+│   │   │   ├── match/        # Job Fit flow
+│   │   │   ├── screen/       # Resume Screener flow + ranked results
 │   │   │   ├── history/      # Past analyses
-│   │   │   └── settings/     # User settings & credits
+│   │   │   ├── reports/[id]/ # One analysis as a full page (print-ready)
+│   │   │   ├── settings/     # Profile, credits ledger, data export, account deletion
+│   │   │   └── help/         # Short answers: credits, limits, how to read a report
 │   │   └── layout.tsx        # Dashboard shell with DashboardDataProvider
 │   ├── api/
 │   │   ├── auth/[...all]/    # Better Auth handler (+ /api/auth/ok, /api/auth/jwks, /api/auth/token)
@@ -86,13 +88,16 @@ src/
 │   └── layout.tsx            # Root layout: theme provider, Toaster, Umami script & Organization JSON-LD
 ├── components/
 │   ├── dashboard/
-│   │   ├── match/            # Match workflow components
-│   │   ├── screen/           # Screening workflow components
-│   │   ├── history/          # History & details components
-│   │   ├── settings/         # Settings components
-│   │   ├── sidebar.tsx
-│   │   ├── top-nav.tsx
-│   │   └── credit-display.tsx
+│   │   ├── flow/             # Shared by both tools: resume upload + pickers, job posting step + hook, flow steps
+│   │   ├── match/            # Job Fit stepper
+│   │   ├── screen/           # Screener stepper + ranked results
+│   │   ├── report/           # The report: paper sheet, margin notes, tabs, bullets and cover letter panels
+│   │   ├── history/          # History table, resume preview
+│   │   ├── settings/         # Profile, credits ledger, account (export + delete)
+│   │   ├── step-list.tsx     # Live job steps (inline, from the SSE stream)
+│   │   ├── notes.tsx         # ErrorNote / NoCredits (402) / RequestError
+│   │   ├── cost-ledger.tsx   # Price and balance-after, shown before anything is spent
+│   │   └── sidebar.tsx · top-nav.tsx · credit-display.tsx · user-menu.tsx
 │   ├── marketing/            # Landing page + auth screens
 │   │   ├── auth-shell.tsx    # Shared frame for all four auth screens
 │   │   ├── auth-form.tsx     # Sign-in / sign-up form
@@ -282,32 +287,32 @@ data export) is a `/v1/*` call from the browser. The contract is
 ## Key Features Explained
 
 ### Job Fit Analysis Workflow
-1. **Step 1:** Select or upload your resume
-2. **Step 2:** Enter job description (URL or paste text)
-3. **Step 3:** Process JD and analyze match
-4. **Step 4:** View results with score, strengths, gaps, and recommendations
+1. **Resume:** pick one you already added, or add a PDF, DOCX or TXT (limits are stated beside the upload area)
+2. **Job posting:** a link, or pasted text; live steps show what the server is doing
+3. **Analyze:** the price and your balance afterwards are shown first (1 credit, returned if it fails)
+4. **Report:** opens at `/dashboard/reports/[id]`: the score written on a paper sheet, findings in the text and the editor's notes in the margin, with tabs for tailored bullets (free, once) and a cover letter (1 credit). "Print or save as PDF" prints the whole report.
 
 ### Resume Screening Workflow
-1. **Step 1:** Upload multiple candidate resumes
-2. **Step 2:** Enter job posting URL
-3. **Step 3:** Click "Start Screening" to analyze all resumes
-4. **Step 4:** View ranked results, sorted by match score
+1. **Resumes:** pick or add up to 20
+2. **Job posting:** a link or pasted text
+3. **Screen:** the total cost is shown first; failed resumes are refunded
+4. **Ranking:** a ranked table with a short reason per resume; each row opens that candidate's report
 
 ### Dashboard Overview
-- **Stats cards:** Resumes, job descriptions and analyses
-- **Recent analyses:** 5 most recent analyses
-- **Quick actions:** Link to start new analysis
+- **Recent analyses:** a ledger with the score, the credits each one cost and a link to the report
+- **First run:** what each tool is for and what it costs
+- **No credits:** a plain note; uploading and reading reports keep working
 
 ### History Page
 - **Sortable table:** Search, filter, and sort by score or date
 - **Tab switcher:** View Job Fit analyses or Resume Screenings separately
-- **Detail modal:** Click to view full analysis report
+- **Reports:** "Open report" goes to the full report page
 - **Delete:** Removes only the analysis; the resume and job description stay (the credit spent isn't returned)
 
 ### Settings Page
 - **Profile tab:** Update name, change password, sign out (via Better Auth)
-- **Credits tab:** View balance and transaction history
-- **Account tab:** Danger zone (future features)
+- **Credits tab:** balance, what each action costs, and the ledger with a running balance
+- **Account tab:** "Download my data" (ZIP, once an hour) and "Delete account" (typed email plus password; Google-only users confirm with a recent sign-in). Deleting erases everything and cannot be undone; only a salted hash of the email is kept, so the signup credits cannot be claimed twice.
 
 ## Performance Optimizations
 

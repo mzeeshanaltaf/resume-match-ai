@@ -388,6 +388,23 @@ export const api = {
     get: (id: string, signal?: AbortSignal) =>
       json<JobOut>(`/v1/jobs/${encodeURIComponent(id)}`, { signal }),
   },
+
+  account: {
+    /**
+     * Everything the user owns as a ZIP. Needs the Authorization header, so it is
+     * fetched as a blob (a plain link cannot send it). One export per hour: a
+     * second one answers 429 `EXPORT_RATE_LIMITED` with `details.retry_after_seconds`.
+     */
+    export: async (
+      signal?: AbortSignal
+    ): Promise<{ blob: Blob; fileName: string }> => {
+      const res = await request("/v1/account/export", { signal });
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = /filename="?([^";]+)"?/i.exec(disposition);
+      return { blob, fileName: match?.[1] ?? "resumatch-export.zip" };
+    },
+  },
 };
 
 // Result types for `waitForJob<...>`, re-exported so callers import from one place.

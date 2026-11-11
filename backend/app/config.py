@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     # Decisions API validation gate.
     decision_model: str = "gpt-6-luna"
     decision_min_probability: float = Field(default=0.7, ge=0, le=1)
+    decision_timeout_seconds: float = Field(default=60, gt=0)  # not a queued/flex request
 
     # ── Firecrawl (job-page scraping) ───────────────────────────────────────
     firecrawl_api_key: str = ""
@@ -83,6 +84,19 @@ class Settings(BaseSettings):
     max_resumes_per_user: int = Field(default=50, gt=0)
     # A PDF text layer shorter than this is treated as scanned and sent to vision OCR.
     scanned_pdf_min_chars: int = Field(default=20, ge=0)
+    # Resolution of the page images sent to vision OCR.
+    ocr_render_dpi: int = Field(default=150, ge=72, le=300)
+    # Multipart framing (boundaries, the `mode` field) allowed on top of MAX_UPLOAD_BYTES
+    # before the raw request body is cut off.
+    upload_overhead_bytes: int = Field(default=64 * 1024, ge=0)
+    # Zip-bomb guard: a DOCX whose parts expand beyond this is refused before parsing.
+    max_docx_uncompressed_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
+
+    # ── Background jobs / SSE ───────────────────────────────────────────────
+    # How long a finished job's event history stays in memory for late SSE subscribers
+    # (afterwards events are rebuilt from the jobs table).
+    job_channel_retention_seconds: int = Field(default=120, ge=0)
+    sse_heartbeat_seconds: float = Field(default=15, gt=0)
 
     # ── Credits ─────────────────────────────────────────────────────────────
     signup_credits: int = Field(default=10, ge=0)

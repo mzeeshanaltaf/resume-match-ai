@@ -67,6 +67,7 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 ## backend/ (FastAPI, added in the rebuild — see `docs/plan/`)
 - Python 3.12 + uv. Run: `cd backend && docker compose -f docker-compose.dev.yml up -d && uv sync && uv run alembic upgrade head && uv run uvicorn app.main:app --reload` (port 8000); tests: `uv run pytest`.
 - Reads `backend/.env` only, **never** the repo-root `.env.local` (production `DATABASE_URL`). All settings/limits/model names live in `backend/app/config.py`; template `backend/.env.example`.
+- Phase 2 added the documents pipeline: `POST/GET /v1/resumes`, `/v1/job-descriptions`, `/v1/jobs/{id}[/events]` (SSE). Uploads return `202 {job_id}`; extraction, OCR, the Decisions-API validation gate and storage run as in-process jobs. All OpenAI calls go through `app/services/llm.py`; model/tier/limits come only from settings. `uv run python dev/dev_server.py` runs the app with a dev JWT and fake AI (no keys).
 - Not wired to the Next.js app yet (phase 4); n8n is still the live backend until the cutover. Migration `0002` truncates tables: do not run against production before the deploy phase.
 
 ## Conventions & gotchas

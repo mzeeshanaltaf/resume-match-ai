@@ -5,6 +5,7 @@ import os
 import re
 import time
 from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,11 @@ from app.auth import StaticKeyStore, get_key_store
 from app.config import Settings, get_settings
 from app.db import build_engine, get_session
 from app.main import create_app
+from app.services.jobs import JobRunner
+from app.services.llm import get_llm
+from app.services.scraping import get_firecrawl
+from app.services.storage import LocalStorage, get_storage
+from tests.fakes import FakeFirecrawl, FakeLLM
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 TEST_DB_URL = os.environ.get(
@@ -217,6 +223,8 @@ def db_app(app: FastAPI, sessionmaker: async_sessionmaker[AsyncSession]) -> Fast
             yield s
 
     app.dependency_overrides[get_session] = _session
+    # Jobs run on the same test database (replaces the runner bound to the real engine).
+    app.state.job_runner = JobRunner(lambda: sessionmaker, app.dependency_overrides[get_settings]())
     return app
 
 
@@ -225,3 +233,100 @@ async def db_client(db_app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
     transport = httpx.ASGITransport(app=db_app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
         yield http
+
+
+# ── Document pipeline (OpenAI and Firecrawl mocked, local object storage) ───
+
+
+@dataclass
+class Pipeline:
+    app: FastAPI
+    client: httpx.AsyncClient
+    settings: Settings
+    llm: FakeLLM
+    firecrawl: FakeFirecrawl
+    storage: LocalStorage
+    runner: JobRunner
+    make_token: Callable[..., str]
+
+    def headers(self, sub: str = "user-1", **claims: Any) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.make_token(sub=sub, **claims)}"}
+
+    async def upload(
+        self,
+        data: bytes,
+        filename: str = "resume.pdf",
+        *,
+        mode: str | None = "candidate",
+        sub: str = "user-1",
+    ) -> httpx.Response:
+        form = {"mode": mode} if mode is not None else {}
+        return await self.client.post(
+            "/v1/resumes",
+            files={"file": (filename, data, "application/octet-stream")},
+            data=form,
+            headers=self.headers(sub),
+        )
+
+    async def finish(self, response: httpx.Response, sub: str = "user-1") -> dict[str, Any]:
+        """Wait for the job a 202 response started and return its final snapshot."""
+        assert response.status_code == 202, response.text
+        await self.runner.wait_idle()
+        job = await self.client.get(f"/v1/jobs/{response.json()['job_id']}", headers=self.headers(sub))
+        assert job.status_code == 200, job.text
+        return job.json()
+
+    async def upload_ok(self, data: bytes, filename: str = "resume.pdf", **kw: Any) -> dict[str, Any]:
+        job = await self.finish(await self.upload(data, filename, **kw), kw.get("sub", "user-1"))
+        assert job["status"] == "succeeded", job
+        return job["result"]["resume"]
+
+    async def submit_jd(self, sub: str = "user-1", **body: Any) -> httpx.Response:
+        body.setdefault("mode", "candidate")
+        return await self.client.post("/v1/job-descriptions", json=body, headers=self.headers(sub))
+
+
+@pytest_asyncio.fixture
+async def make_pipeline(
+    make_settings: Callable[..., Settings],
+    make_token: Callable[..., str],
+    signing_key: Ed25519PrivateKey,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[Callable[..., Pipeline]]:
+    clients: list[httpx.AsyncClient] = []
+
+    def _make(**setting_overrides: Any) -> Pipeline:
+        settings = make_settings(**setting_overrides)
+        app = create_app(settings)
+        llm, firecrawl = FakeLLM(), FakeFirecrawl()
+        storage = LocalStorage(settings.storage_local_dir)
+        runner = JobRunner(lambda: sessionmaker, settings)
+        app.state.job_runner = runner
+
+        async def _session() -> AsyncIterator[AsyncSession]:
+            async with sessionmaker() as s:
+                yield s
+
+        app.dependency_overrides.update(
+            {
+                get_settings: lambda: settings,
+                get_key_store: lambda: StaticKeyStore({KID: signing_key.public_key()}),
+                get_session: _session,
+                get_llm: lambda: llm,
+                get_firecrawl: lambda: firecrawl,
+                get_storage: lambda: storage,
+            }
+        )
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+        client = httpx.AsyncClient(transport=transport, base_url="http://test")
+        clients.append(client)
+        return Pipeline(app, client, settings, llm, firecrawl, storage, runner, make_token)
+
+    yield _make
+    for client in clients:
+        await client.aclose()
+
+
+@pytest_asyncio.fixture
+async def pipeline(make_pipeline: Callable[..., Pipeline]) -> Pipeline:
+    return make_pipeline()

@@ -35,28 +35,23 @@ export default async function ContactPage({ searchParams }: Props) {
     <div className="flex min-h-screen flex-col">
       <Navbar />
       <main className="flex-1">
-        <section className="px-4 py-16 sm:py-24">
-          <div className="container mx-auto max-w-2xl">
-            <div className="mb-10 text-center">
-              <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Contact
-              </p>
-              <h1
-                className="mt-3 text-3xl tracking-tight sm:text-4xl"
-                style={{
-                  fontFamily: "var(--font-display), Georgia, serif",
-                  fontStyle: "italic",
-                }}
-              >
-                Get in touch
+        <section className="px-4 py-14 sm:px-6 md:py-24 lg:px-8">
+          <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)] lg:gap-20">
+            <div>
+              <h1 className="max-w-[12ch] text-[clamp(2.25rem,1.2rem+3vw,3.75rem)] font-bold leading-[1.04] tracking-[-0.025em] text-balance">
+                Write to us.
               </h1>
-              <p className="mx-auto mt-3 max-w-md text-muted-foreground">
-                Have a question, found a bug, or want to talk pricing? Send us a
-                message — we read everything.
+              <p className="mt-5 max-w-[26rem] leading-relaxed text-muted-foreground">
+                A question, a bug, a score that looks wrong, a feature you
+                want. A person reads every message.
+              </p>
+              <p className="mt-4 max-w-[26rem] text-sm leading-relaxed text-muted-foreground">
+                Your name, email and message are forwarded to us so we can
+                reply.
               </p>
             </div>
 
-            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+            <div className="rounded-lg border border-border bg-card p-6 sm:p-8">
               <ContactForm initialSuccess={!!sent} initialError={initialError} />
             </div>
           </div>

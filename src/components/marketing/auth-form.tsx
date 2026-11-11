@@ -79,6 +79,7 @@ export function AuthForm({ mode, googleEnabled }: AuthFormProps) {
   return (
     <AuthShell
       title={isSignUp ? "Create your account" : "Welcome back"}
+      note={isSignUp ? "ten free credits. uploads cost nothing." : "welcome back. your reports kept their place."}
       subtitle={
         isSignUp
           ? "Start matching your resume in seconds."
@@ -90,7 +91,7 @@ export function AuthForm({ mode, googleEnabled }: AuthFormProps) {
             Already have an account?{" "}
             <Link
               href="/sign-in"
-              className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+              className="font-semibold text-foreground underline underline-offset-4 decoration-1 hover:decoration-2"
             >
               Sign in
             </Link>
@@ -100,7 +101,7 @@ export function AuthForm({ mode, googleEnabled }: AuthFormProps) {
             Don&apos;t have an account?{" "}
             <Link
               href="/sign-up"
-              className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+              className="font-semibold text-foreground underline underline-offset-4 decoration-1 hover:decoration-2"
             >
               Get started
             </Link>
@@ -135,7 +136,7 @@ export function AuthForm({ mode, googleEnabled }: AuthFormProps) {
       <form onSubmit={handleSubmit} className="space-y-4">
         {isSignUp && (
           <div className="space-y-1.5">
-            <label htmlFor="name" className="text-sm font-medium">
+            <label htmlFor="name" className="text-sm font-semibold">
               Name
             </label>
             <Input
@@ -149,7 +150,7 @@ export function AuthForm({ mode, googleEnabled }: AuthFormProps) {
           </div>
         )}
         <div className="space-y-1.5">
-          <label htmlFor="email" className="text-sm font-medium">
+          <label htmlFor="email" className="text-sm font-semibold">
             Email
           </label>
           <Input
@@ -164,13 +165,13 @@ export function AuthForm({ mode, googleEnabled }: AuthFormProps) {
         </div>
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <label htmlFor="password" className="text-sm font-medium">
+            <label htmlFor="password" className="text-sm font-semibold">
               Password
             </label>
             {!isSignUp && (
               <Link
                 href="/forgot-password"
-                className="text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+                className="text-sm font-semibold text-foreground underline underline-offset-4 decoration-1 hover:decoration-2"
               >
                 Forgot password?
               </Link>
@@ -189,7 +190,7 @@ export function AuthForm({ mode, googleEnabled }: AuthFormProps) {
         </div>
 
         {error && (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-sm font-medium text-pencil" role="alert">
             {error}
           </p>
         )}
@@ -197,7 +198,7 @@ export function AuthForm({ mode, googleEnabled }: AuthFormProps) {
         <Button
           type="submit"
           disabled={loading || googleLoading}
-          className="w-full gap-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
+          className="w-full gap-2"
         >
           {loading && <Loader2 className="h-4 w-4 animate-spin" />}
           {isSignUp ? "Create account" : "Sign in"}

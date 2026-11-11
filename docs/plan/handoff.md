@@ -10,7 +10,7 @@ Each session appends one section when it finishes. Read the whole file at the st
 | 2 Documents pipeline | Done (2026-11-11) | `phase-2-backend-documents` (stacked on `phase-1-backend-foundation`) | see `git log` on branch |
 | 3 Matching + account | Done (2026-11-11) | `phase-3-backend-matching` (stacked on `phase-2-backend-documents`) | see `git log` on branch |
 | 4 Frontend data layer | Done (2026-11-11) | `phase-4-frontend-data-layer` (stacked on `phase-3-backend-matching`) | see `git log` on branch |
-| 5 Design system + marketing | Not started | | |
+| 5 Design system + marketing | Done (2026-11-11) | `phase-5-design-system` (stacked on `phase-4-frontend-data-layer`) | see `git log` on branch |
 | 6 Dashboard redesign | Not started | | |
 | 7 Local E2E verification | Not started | | |
 | 8 Deployment | Not started | | |
@@ -347,3 +347,67 @@ Phase 3's exit criteria were re-verified first: dev Postgres up, `uv run pytest`
 ### Next session starting point
 - Phase 5 (design system + marketing). First: read the "Temporary UI" list above, then start the stack as described (`npm run dev` + the backend) so you can see real screens while designing. Phase 5 only needs the marketing/auth routes; the dashboard keeps working on the new data layer meanwhile.
 - Must not break: `src/lib/api/*` contracts (`ApiError`, `waitForJob`, `describeError`), the `jwt()` payload keeping `email`, `deleteUser.beforeDelete` aborting on any backend failure, `NEXT_PUBLIC_API_URL` being build-time, nothing in `src/` referencing n8n except the contact route, no Clerk / `middleware.ts` / Vercel Analytics, and nothing run against the production DB before phase 8.
+
+## Phase 5: Design system and marketing/auth redesign (done 2026-11-11, branch phase-5-design-system)
+
+Phase 4's exit criteria were re-verified first: `npx tsc --noEmit` clean, `npm run build` passes, `grep -ri n8n src` only matches `src/app/api/contact/route.ts`, git clean on `phase-4-frontend-data-layer`. No gap. This branch is stacked on it.
+
+### Built
+- **`PRODUCT.md` and `DESIGN.md`** at the repo root (written before any UI code; DESIGN.md follows the six-section Stitch format with OKLCH tokens in the frontmatter). Direction "the editor's desk".
+- **Tokens** (`src/app/globals.css`): full rewrite. See "Token names" below. shadcn primitives re-themed through them (no per-component hex).
+- **Fonts** (`src/lib/fonts.ts`): Schibsted Grotesk, Literata, Reenie Beanie. Geist, DM Serif Display and every mono eyebrow removed.
+- **Proof marks** (`src/components/proof/`): the signature component, see "Proof-mark API".
+- **Landing page** rebuilt: pinned scroll-linked hero (a resume marked up while you scroll, ending in the circled score), two desks (candidate, recruiter), anatomy of a sample report (six parts with notes), honest credits ledger, FAQ (native `<details>`, truthful retention wording, also emitted as FAQPage JSON-LD from the same array), footer. Navbar has a real mobile menu (top sheet below `lg`). All invented metrics, pricing tiers and "analysed and discarded" claims removed.
+- **Restyled**: about (rewritten honestly), contact (honeypot and native `action="/api/contact"` POST fallback untouched; only classes/markup around them changed), privacy and terms (rewritten for the real system: Better Auth not Clerk, files stored until deleted, OpenAI/Firecrawl/Resend/Google/Upstash named, export + account deletion, **deleted-email salted hash for signup-credit abuse prevention**, 10 credits / 1 per analysis), auth shell + sign-in, sign-up, verify-email, forgot-password (each with a handwritten note beside the form on large screens), 404, `icon`, `apple-icon`, manifest, `opengraph-image` + `twitter-image` (generated; Schibsted Grotesk fetched from Google Fonts at build time with a fallback font if offline).
+- Kept intact: Umami `<Script>`, Organization JSON-LD (SoftwareApplication JSON-LD now has one free offer instead of the invented Free/Pro tiers), canonical URLs, robots, sitemap (+ `/contact`).
+
+### Token names and where defined (`src/app/globals.css`, `:root` and `.dark`, exposed in `@theme inline`)
+- shadcn roles: `background foreground card popover secondary muted accent primary border input ring destructive sidebar-* chart-1..5` (+ `*-foreground`, `destructive-foreground`). `--input` is the field **border** colour (3:1), not a fill.
+- The two pencils: `pencil`, `pencil-foreground`, `pencil-wash`; `proof`, `proof-foreground`, `proof-wash`. `destructive` = `pencil`. Score colours: `score-high` (= proof), `score-mid` (= muted-foreground), `score-low` (= pencil).
+- The paper document: `page`, `page-foreground`, `page-muted`, `page-rule`, `page-pencil`, `page-proof`. In dark mode `page` dims slightly but its ink and mark colours stay at light values on purpose (the lamp stays on the page). Use these for the Phase 6 report.
+- Shadows `shadow-sheet` (document only) and `shadow-overlay`; radius `--radius: 0.375rem`, `rounded-page` (2px); easings `--ease-out-quart`, `--ease-out-expo`.
+- Contrast was computed (OKLCH to sRGB, WCAG formula) for every text/surface pair in both themes (all AA) and re-checked by axe-core on every public page.
+
+### Font variable names
+`--font-schibsted` (Tailwind `font-sans`), `--font-literata` (`font-serif`), `--font-handwriting` (`font-hand`, margin notes and the written score only). The root layout applies the first two; `(marketing)/layout.tsx` applies the hand. **Phase 6 must apply `reenieBeanie.variable` in the dashboard layout** (or on the report page) before using `font-hand`.
+
+### Proof-mark API (`import { ... } from "@/components/proof"`)
+- `<Strike>`, `<Circled>`, `<Underlined>` wrap inline text (props: `tone` = `pencil|proof|ink`, `surface` = `desk|page`, `wrap`, `strokeWidth`, plus draw timing). `<Insert word="SQL" />` (caret under the line + word above; zero width; needs `line-height` of about 2), `<MarginNote arrow tilt>` (handwriting with a leader arrow), `<ScoreMark value="78" suffix="%" />` (hand-written grade, circled), `<ProofStroke d viewBox segments>` (primitive for custom paths).
+- Draw timing (`DrawTiming`, same on every mark): either `progress` (a `MotionValue<number>` 0..1) + `range` (`[start, end]` slice), or self-timed with `delay`/`duration` (starts when scrolled into view, or on mount with `immediate`), or `still`. Reduced motion is read after mount (not during render, so there is no hydration mismatch) and renders every mark finished.
+- Marks are `aria-hidden`; the meaning must also be in nearby text. Use `surface="page"` whenever drawn on a `bg-page` sheet.
+- Reference usage: `src/components/marketing/landing/resume-specimen.tsx` (the hero sheet, a size container: text in `cqw`, margin notes hang in the margin from the `@sm` container width and fall under their line below it).
+
+### Deviations from the plan (and why)
+- **Dashboard is not re-themed.** The plan scopes Phase 5 to the public half. Dashboard components still carry hard-coded `emerald-*` / `font-mono` classes (about 25 files under `src/components/dashboard` and `src/app/(dashboard)`), so the dashboard now shows paper/ink neutrals with emerald accents until Phase 6. It works; it is just visually unreconciled.
+- **No image probes** (no native image generation, as the plan says) and no interview round for PRODUCT.md: the master plan already holds the confirmed register, users, personality and anti-references, so PRODUCT.md was written from it.
+- Buttons and inputs are **44px high below `md`** (36px from `md`) to meet touch-target guidance; this also affects dashboard buttons.
+- Sonner toasts: `richColors` removed (its fills are not token-based); icons are tinted with `text-proof` / `text-pencil`.
+- Badge gained `pencil` and `proof` variants; badges are `rounded-sm`, not pills.
+- `public/opengraph-image.png` deleted; the social image is now generated by `src/app/opengraph-image.tsx` (and `twitter-image.tsx`), and the layout no longer lists `images`. `icon`/`apple-icon` no longer use `runtime = "edge"` (they prerender statically now).
+- Default page titles/descriptions were reworded to drop em dashes and the "Instantly" claim.
+- Small a11y fixes on the way: the OTP input now has an `aria-label` (axe "critical: label"); the "Check your spam" sentence lost its em dash.
+
+### New commands / env vars / ports
+- None. No new dependencies in `package.json` (`motion`, already installed, is used). For verification only: `npm i --no-save playwright-core axe-core` (not saved).
+- The dev server fell back to **port 3001** because something else held 3000 on this machine; screenshots were taken against 3001.
+
+### Verification run (commands + result)
+- `npx tsc --noEmit`: clean. `npm run build`: passes (26 routes; the edge-runtime warning is gone).
+- Screenshots (headless Chrome via Playwright) of landing, about, contact, privacy, terms, sign-in, sign-up, verify-email, forgot-password and 404 at **390, 820 and 1440 wide, light and dark** (reduced motion on for stable frames), plus the landing at 1366x768 and 1280x720: **no horizontal scroll on any of them** (`scrollWidth == innerWidth`, checked per page), no console errors except the 404's own status.
+- **Reduced motion**: pages render with every mark finished and the hero un-pinned. Without reduced motion, the scroll-linked run (marks drawn in sequence, score last), the timed playback on mobile, and the finished state were each captured.
+- **axe-core** (wcag2a, wcag2aa, wcag21aa, wcag22aa, best-practice) on all of the above pages, light/dark x mobile/desktop: no colour-contrast violations anywhere. It found a heading-order issue in the sample resume (fixed: the specimen's fake headings are now `<p>`) and the unlabeled OTP input (fixed).
+- Keyboard: visible focus ring on inputs and buttons (2px proofreader blue + offset); the mobile menu opens, traps focus, closes on Escape and on following a link; the contact form still has `action="/api/contact"`, `method=post` and the `hp_field` honeypot with `tabindex=-1`.
+- Hydration: one mismatch (reduced-motion users only) was found and fixed; none left on the checked pages.
+- **Critique pass** against DESIGN.md and the impeccable bans (no side stripes, gradient text, glass, hero-metric template, identical card grids, modal-as-first-thought, em dashes, mono eyebrows): findings fixed in place: score colliding with the resume header on narrow sheets, margin notes colliding on wide ones, content edges misaligned between navbar/footer and sections, a mobile grid blow-out from a no-wrap underline, the pinned sheet overflowing a 720px-tall viewport. Logged, not fixed: see below.
+
+### Open issues / decisions deferred
+- **Landing and legal copy promise things Phase 6 builds**: "download everything from your settings" and "delete your account from your settings" (the Account tab is still a placeholder; the backend endpoints and the Better Auth hook exist). Do not deploy the public pages without Phase 6.
+- The hero's scroll-linked pin is 250svh tall on `lg+`; on short desktop viewports the sheet is capped by height (`lg:max-w-[calc((100svh-13rem)*0.84)]`). Worth a look on real hardware in Phase 7.
+- Reenie Beanie is thin: notes are never below about 18px and sit on a light page, but a heavier hand may be worth trying if Phase 7 testing finds them hard to read.
+- OG image and icons embed hex mirrors of the tokens (`#181e2b` ink, `#fefcf7` page, `#be2323` pencil, `#f7f2e9` desk); if tokens change, update `icon.tsx`, `apple-icon.tsx`, `opengraph-image.tsx`, `manifest.ts` and `viewport.themeColor` in `layout.tsx`.
+- The OG image fetches its font from Google Fonts at build time; offline builds fall back to the default sans.
+- Not run: Safari/Firefox, real touch devices, a screen-reader pass.
+
+### Next session starting point
+- Phase 6 (dashboard redesign). First: read `PRODUCT.md` and `DESIGN.md`, then the "Token names", "Font variable names" and "Proof-mark API" sections above. Apply `reenieBeanie.variable` in the dashboard layout. Re-theme the dashboard through tokens (replace every `emerald-*`, `font-mono` and hard-coded colour); use `bg-page` + proof marks for the report page (`/dashboard/reports/[id]`), the ledger pattern (see `landing/credits.tsx`) for credits, and build the Account tab (export + delete) that the public copy already promises.
+- Must not break: the contact form's honeypot and native POST fallback, `src/lib/api/*` contracts, the `jwt()` payload keeping `email`, token-only colours, `prefers-reduced-motion` behaviour of the marks, and nothing run against the production DB before Phase 8.

@@ -17,11 +17,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // Token colors only: blue confirms, red pencil flags. No rich-color fills.
       icons={{
-        success: <CircleCheckIcon className="size-4" />,
-        info: <InfoIcon className="size-4" />,
-        warning: <TriangleAlertIcon className="size-4" />,
-        error: <OctagonXIcon className="size-4" />,
+        success: <CircleCheckIcon className="size-4 text-proof" />,
+        info: <InfoIcon className="size-4 text-muted-foreground" />,
+        warning: <TriangleAlertIcon className="size-4 text-pencil" />,
+        error: <OctagonXIcon className="size-4 text-pencil" />,
         loading: <Loader2Icon className="size-4 animate-spin" />,
       }}
       style={

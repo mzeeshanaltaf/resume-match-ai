@@ -321,11 +321,11 @@ data export) is a `/v1/*` call from the browser. The contract is
 
 ## Styling & Theme
 
-- **Color scheme:** Emerald green (#10b981) accent on slate theme
-- **Dark mode:** System-aware with manual toggle
-- **Typography:** DM Serif Display (display) + system fonts (body)
-- **Components:** shadcn/ui with custom tailored styling
-- **Animations:** CSS transitions + Lucide React icons
+- **Design direction:** "the editor's desk", documented in [PRODUCT.md](PRODUCT.md) and [DESIGN.md](DESIGN.md). Warm paper neutrals, deep ink, a red pencil for fixes and proofreader blue for confirmations; all OKLCH tokens live in `src/app/globals.css`
+- **Dark mode:** "desk at night", system-aware with manual toggle, same tokens
+- **Typography:** Schibsted Grotesk (interface), Literata (documents), Reenie Beanie (margin notes only)
+- **Components:** shadcn/ui re-themed through tokens; proof marks (SVG strokes drawn with `motion`) in `src/components/proof/`
+- **Animations:** `motion` path-length drawing, static under `prefers-reduced-motion`
 
 ## Testing
 
@@ -461,7 +461,7 @@ For issues, questions, or feature requests:
 
 ### v1.1.0
 - ✅ Full SEO baseline (robots.txt, XML sitemap, canonical URLs)
-- ✅ Generated OG + Twitter card image (1200×630, emerald brand)
+- ✅ Generated OG + Twitter card image (1200×630, generated in `src/app/opengraph-image.tsx`)
 - ✅ Generated favicon + Apple home-screen icon
 - ✅ PWA web manifest
 - ✅ Organization + SoftwareApplication JSON-LD structured data

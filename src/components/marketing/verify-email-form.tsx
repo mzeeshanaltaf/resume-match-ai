@@ -77,13 +77,14 @@ export function VerifyEmailForm() {
   return (
     <AuthShell
       title="Check your email"
+      note="nearly there. check your inbox."
       subtitle={`We sent a 6-digit code to ${email}.`}
       footer={
         <>
           Wrong email?{" "}
           <Link
             href="/sign-up"
-            className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+            className="font-semibold text-foreground underline underline-offset-4 decoration-1 hover:decoration-2"
           >
             Start over
           </Link>
@@ -106,7 +107,7 @@ export function VerifyEmailForm() {
         />
 
         {error && (
-          <p className="text-center text-sm text-destructive" role="alert">
+          <p className="text-center text-sm font-medium text-pencil" role="alert">
             {error}
           </p>
         )}
@@ -114,7 +115,7 @@ export function VerifyEmailForm() {
         <Button
           type="submit"
           disabled={verifying || otp.length !== 6}
-          className="w-full gap-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
+          className="w-full gap-2"
         >
           {verifying && <Loader2 className="h-4 w-4 animate-spin" />}
           Verify email

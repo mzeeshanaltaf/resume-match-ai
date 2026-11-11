@@ -60,14 +60,15 @@ export function ContactForm({ initialSuccess = false, initialError }: Props) {
 
   if (status === "success") {
     return (
-      <div className="flex flex-col items-center gap-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-6 py-12 text-center">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15">
-          <CheckCircle2 className="h-6 w-6 text-emerald-500" />
-        </span>
-        <h2 className="text-xl font-semibold">Message sent</h2>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          Thanks for reaching out — we read every message and will get back to
-          you as soon as possible.
+      <div
+        role="status"
+        className="flex flex-col items-start gap-3 py-4"
+      >
+        <CheckCircle2 aria-hidden className="h-6 w-6 text-proof" />
+        <h2 className="text-2xl font-bold tracking-tight">Message sent</h2>
+        <p className="max-w-sm leading-relaxed text-muted-foreground">
+          Thanks for writing. We read every message and will reply as soon as
+          we can.
         </p>
         <button
           type="button"
@@ -77,7 +78,7 @@ export function ContactForm({ initialSuccess = false, initialError }: Props) {
             setMessage("");
             setStatus("idle");
           }}
-          className="mt-2 text-sm font-medium text-emerald-600 transition-colors hover:text-emerald-500 dark:text-emerald-400"
+          className="mt-1 rounded-sm text-sm font-semibold underline underline-offset-4 transition-colors hover:text-muted-foreground"
         >
           Send another
         </button>
@@ -113,7 +114,7 @@ export function ContactForm({ initialSuccess = false, initialError }: Props) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <label htmlFor="name" className="text-sm font-medium">
+        <label htmlFor="name" className="text-sm font-semibold">
           Name
         </label>
         <Input
@@ -130,7 +131,7 @@ export function ContactForm({ initialSuccess = false, initialError }: Props) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <label htmlFor="email" className="text-sm font-medium">
+        <label htmlFor="email" className="text-sm font-semibold">
           Email
         </label>
         <Input
@@ -147,7 +148,7 @@ export function ContactForm({ initialSuccess = false, initialError }: Props) {
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <label htmlFor="message" className="text-sm font-medium">
+          <label htmlFor="message" className="text-sm font-semibold">
             Message
           </label>
           <span className="text-xs text-muted-foreground">
@@ -169,7 +170,7 @@ export function ContactForm({ initialSuccess = false, initialError }: Props) {
 
       {status === "error" && (
         <p
-          className="rounded-lg border border-destructive/20 bg-destructive/5 px-3.5 py-2.5 text-sm text-destructive"
+          className="rounded-md bg-pencil-wash px-3.5 py-2.5 text-sm font-medium text-pencil"
           role="alert"
         >
           {errorMsg}
@@ -179,7 +180,7 @@ export function ContactForm({ initialSuccess = false, initialError }: Props) {
       <Button
         type="submit"
         disabled={status === "loading"}
-        className="group gap-2 self-start bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
+        className="group gap-2 self-start"
       >
         {status === "loading" ? (
           <Loader2 className="h-4 w-4 animate-spin" />

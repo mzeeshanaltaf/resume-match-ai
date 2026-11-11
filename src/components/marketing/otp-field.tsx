@@ -33,6 +33,7 @@ export function OtpField({
         onComplete={onComplete}
         disabled={disabled}
         autoFocus={autoFocus}
+        aria-label="6-digit code from your email"
       >
         <InputOTPGroup className="gap-2">
           {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -56,7 +57,7 @@ export function OtpField({
 export function EmailDeliveryNote() {
   return (
     <p className="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-center text-xs text-muted-foreground">
-      Can&apos;t find the email? Check your spam or junk folder — it arrives from{" "}
+      Can&apos;t find the email? Check your spam or junk folder. It arrives from{" "}
       <span className="font-medium break-all text-foreground">
         {OTP_SENDER_EMAIL}
       </span>

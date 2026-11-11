@@ -4,7 +4,7 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 
 ## Stack
 - **Next.js 16.1.6** (App Router, `src/` dir), TypeScript, React 19
-- **Tailwind CSS v4 + shadcn/ui** (slate theme, emerald `#10b981` accent), `next-themes` dark mode
+- **Tailwind CSS v4 + shadcn/ui** re-themed to the "editor's desk" design system (see **Design system** below), `next-themes` dark mode
 - **Auth: Better Auth** (`better-auth` + `pg`) — email/password + Google OAuth
 - **Postgres** — `resume_match` schema holds the Better Auth tables (`user`/`session`/`account`/`verification`/`jwks`, owned by the frontend) and the app tables (owned by the FastAPI backend's Alembic; the frontend never queries them)
 - **FastAPI backend** (`backend/`) = the AI/data backend; the browser calls it directly with a Better Auth JWT. **n8n is only used by the contact form** (`src/app/api/contact`)
@@ -31,6 +31,14 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 - **No DB migration** — codes live in the existing `verification` table.
 - `RESEND_FROM_EMAIL` must be **unquoted** in Coolify (dotenv strips quotes, Docker doesn't → Resend 422 on `from`). `<Toaster>` now lives in the **root** layout (was dashboard-only, which silently swallowed every marketing-page toast).
 - Preflight: `node ~/.claude/skills/better-auth-email-otp/scripts/preflight.mjs --app-dir src/app`.
+
+## Design system (Phase 5; read `PRODUCT.md` and `DESIGN.md` before any UI work)
+- Direction: "the editor's desk". Paper neutrals, deep ink, **red pencil = a fix, proofreader blue = a confirmation**, nothing else is an accent. No emerald, glows, gradients, glass, italics in display type, mono eyebrows, or pure black/white; no em dashes in copy.
+- **Tokens only** in `src/app/globals.css` (OKLCH). Standard shadcn names (`bg-background`, `text-muted-foreground`, `border-input`, `ring`, `sidebar-*`, `chart-*`) plus `pencil`/`pencil-wash`/`proof`/`proof-wash`, `score-high|mid|low`, and the paper document set `page`, `page-foreground`, `page-muted`, `page-rule`, `page-pencil`, `page-proof` (stay light in dark mode). `shadow-sheet` is for a document only; `shadow-overlay` for menus and dialogs. Never write a color literal in a component (the generated icons/OG image/manifest are the exception and mirror the tokens in hex).
+- Fonts: `src/lib/fonts.ts` (`--font-schibsted` to `font-sans`, `--font-literata` to `font-serif`, `--font-handwriting` to `font-hand`). The root layout applies the first two; `(marketing)/layout.tsx` applies the hand. A page using `font-hand` outside `(marketing)` must wrap itself in `reenieBeanie.variable`.
+- Proof marks: `src/components/proof/` (`Strike`, `Circled`, `Underlined`, `Insert`, `MarginNote`, `ScoreMark`, `ProofStroke`, `useDraw`). Draw via a shared `progress` motion value + `range`, or self-timed (`delay`/`duration`); finished and static under `prefers-reduced-motion`. `surface="page"` when drawn on a `bg-page` sheet.
+- Landing sections live in `src/components/marketing/landing/`; shared `Wordmark`/`LogoMark` in `src/components/brand/`. Long-form legal pages use `LegalPage`.
+- Verification helpers (not in the repo): Playwright + a system Chrome, `axe-core` for contrast. `npm i --no-save playwright-core axe-core`.
 
 ## Layout & routing
 - Route groups: `(marketing)` public, `(dashboard)` protected

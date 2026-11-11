@@ -105,7 +105,7 @@ export function ForgotPasswordForm() {
       Remembered it?{" "}
       <Link
         href="/sign-in"
-        className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+        className="font-semibold text-foreground underline underline-offset-4 decoration-1 hover:decoration-2"
       >
         Back to sign in
       </Link>
@@ -113,7 +113,7 @@ export function ForgotPasswordForm() {
   );
 
   const errorNode = error && (
-    <p className="text-center text-sm text-destructive" role="alert">
+    <p className="text-center text-sm font-medium text-pencil" role="alert">
       {error}
     </p>
   );
@@ -122,12 +122,13 @@ export function ForgotPasswordForm() {
     return (
       <AuthShell
         title="Forgot your password?"
+        note="it happens. we will send a code."
         subtitle="Enter your email and we'll send you a 6-digit reset code."
         footer={footer}
       >
         <form onSubmit={handleRequest} className="space-y-4">
           <div className="space-y-1.5">
-            <label htmlFor="email" className="text-sm font-medium">
+            <label htmlFor="email" className="text-sm font-semibold">
               Email
             </label>
             <Input
@@ -146,7 +147,7 @@ export function ForgotPasswordForm() {
           <Button
             type="submit"
             disabled={loading}
-            className="w-full gap-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
+          className="w-full gap-2"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
             Send reset code
@@ -159,6 +160,7 @@ export function ForgotPasswordForm() {
   return (
     <AuthShell
       title="Choose a new password"
+      note="a new password, then straight back in."
       subtitle={`Enter the code we sent to ${email} and pick a new password.`}
       footer={footer}
     >
@@ -166,7 +168,7 @@ export function ForgotPasswordForm() {
         <OtpField value={otp} onChange={setOtp} disabled={loading} autoFocus />
 
         <div className="space-y-1.5">
-          <label htmlFor="new-password" className="text-sm font-medium">
+          <label htmlFor="new-password" className="text-sm font-semibold">
             New password
           </label>
           <Input
@@ -182,7 +184,7 @@ export function ForgotPasswordForm() {
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="confirm-password" className="text-sm font-medium">
+          <label htmlFor="confirm-password" className="text-sm font-semibold">
             Confirm password
           </label>
           <Input
@@ -202,7 +204,7 @@ export function ForgotPasswordForm() {
         <Button
           type="submit"
           disabled={loading}
-          className="w-full gap-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
+          className="w-full gap-2"
         >
           {loading && <Loader2 className="h-4 w-4 animate-spin" />}
           Reset password

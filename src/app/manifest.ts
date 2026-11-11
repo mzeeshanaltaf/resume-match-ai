@@ -5,11 +5,11 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "ResuMatchAI",
     short_name: "ResuMatchAI",
     description:
-      "AI-powered resume analysis and job matching. Get an instant match score with personalised recommendations.",
+      "A resume read closely against a job posting: a score with the reasons, what is missing and what to reword.",
     start_url: "/",
     display: "standalone",
-    background_color: "#020617",
-    theme_color: "#020617",
+    background_color: "#f7f2e9",
+    theme_color: "#f7f2e9",
     icons: [
       {
         src: "/icon",

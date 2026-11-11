@@ -1,16 +1,14 @@
-import { DM_Serif_Display } from "next/font/google";
+import { reenieBeanie } from "@/lib/fonts";
 
-const displayFont = DM_Serif_Display({
-  weight: ["400"],
-  style: ["normal", "italic"],
-  subsets: ["latin"],
-  variable: "--font-display",
-});
-
+/**
+ * The marketing surfaces use the editor's handwriting for margin notes. The
+ * grotesque and the serif come from the root layout (the dashboard needs them
+ * too); Phase 6 loads the hand in the dashboard layout for report annotations.
+ */
 export default function MarketingLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <div className={displayFont.variable}>{children}</div>;
+  return <div className={reenieBeanie.variable}>{children}</div>;
 }

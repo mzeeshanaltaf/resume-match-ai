@@ -1,125 +1,88 @@
 import type { Metadata } from "next";
-import { Navbar } from "@/components/marketing/navbar";
-import { Footer } from "@/components/marketing/footer";
+import { LegalPage, type LegalSection } from "@/components/marketing/legal-page";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "ResuMatchAI Privacy Policy — how we collect, use, and protect your data.",
+  description:
+    "What ResuMatchAI collects, who it is shared with, how long it is kept, and how to delete or download it.",
   alternates: { canonical: "/privacy" },
 };
 
-const sections = [
+const sections: LegalSection[] = [
   {
-    title: "1. Information we collect",
+    title: "1. What we collect",
     body: [
-      "When you create an account, we collect your name and email address via our authentication provider (Clerk). We do not store your password directly.",
-      "When you use our resume matching features, your uploaded resume is temporarily processed by our AI pipeline to generate a match report. Resume content is not stored permanently on our servers.",
-      "We collect standard usage data such as pages visited, features used, and error logs to improve the service. This data is aggregated and not linked to personally identifiable information.",
+      "Account details: your name and email address, and a password stored only as a hash. If you sign in with Google, we receive the name and email Google shares. We also keep the sessions that keep you signed in.",
+      "Your documents: the resumes you upload (the original file and the text read from it), the job postings you add (the link or pasted text, and the fields extracted from it), the reports and generated documents made from them, and your credit balance and ledger.",
+      "Messages you send through the contact form: your name, email address and message.",
+      "Basic usage data: page views, collected by our own self-hosted analytics, which sets no cookies and builds no profile of you. Our server and the services we run on also keep ordinary technical logs.",
     ],
   },
   {
-    title: "2. How we use your information",
+    title: "2. How we use it",
     body: [
-      "To provide and improve the ResuMatchAI service, including generating match reports and recommendations.",
-      "To manage your account, process credits, and send transactional emails (e.g. password resets, billing notifications).",
-      "To analyse usage patterns in aggregate to inform product decisions. We do not sell your personal data to third parties.",
+      "To run the service: to read your resumes and postings, produce your reports, keep your history, and count your credits.",
+      "To keep your account safe: to verify your email address, reset a password, and limit abuse such as repeated form submissions.",
+      "To reply to you, and to understand in aggregate which parts of the site are used. We do not sell your data and we do not use it for advertising.",
     ],
   },
   {
-    title: "3. Data retention",
+    title: "3. Who else handles it",
     body: [
-      "Account data (name, email) is retained for as long as your account is active. You may request deletion at any time by contacting us.",
-      "Resume files submitted for analysis are processed in memory and are not persisted beyond the duration of a single analysis session.",
-      "Match history and analytics stored in your dashboard are retained indefinitely while your account is active, and deleted within 30 days of account closure.",
+      "OpenAI receives the text of your resume and of the job posting, and the images of the pages of a scanned PDF, to write the analysis and read the scan. Nothing else about you is sent with them.",
+      "Firecrawl is asked to fetch a job-posting link when you submit one instead of pasting text.",
+      "Resend delivers the emails we send you, such as verification and password-reset codes. Google handles sign-in if you choose it. Upstash briefly holds your IP address to rate-limit the contact form.",
+      "The service runs on a server we rent, and the contact form passes your message to our own workflow tool so it reaches us. We use no advertising networks and no tracking pixels. We share data when the law requires it.",
     ],
   },
   {
-    title: "4. Third-party services",
+    title: "4. How long we keep it, and deleting it",
     body: [
-      "We use Clerk for authentication and identity management. Clerk's privacy policy applies to data processed through their platform.",
-      "Our own backend service analyses your documents. To do that it sends the text of your resume and the job description to OpenAI, and job posting links you submit are fetched through Firecrawl. We do not share them with anyone else.",
-      "We do not use third-party advertising networks or tracking pixels.",
+      "We keep your documents, reports and history until you delete them. You can delete a resume, a posting or a report yourself at any time. Deleting a resume or a posting also deletes the reports that were made from it.",
+      "You can delete your account from your settings. That erases your resumes (including the stored files), postings, reports, generated documents, credit history and sign-in details. It cannot be undone. Before you do, you can download a copy of everything we hold about you.",
+      "One thing survives deletion. To stop deleting and re-registering from being used to claim the 10 free signup credits again, we keep a one-way, salted hash of your email address and nothing else. It cannot be turned back into the address. If you later register again with the same address, the new account starts with 0 credits.",
+      "Messages sent through the contact form are kept for as long as we need them to reply and handle the request.",
     ],
   },
   {
-    title: "5. Cookies",
+    title: "5. Cookies and local storage",
     body: [
-      "We use strictly necessary session cookies to keep you logged in. We do not use tracking cookies or third-party marketing cookies.",
-      "You can disable cookies in your browser settings, but this may prevent you from logging in to the application.",
+      "We set a session cookie so you stay signed in. We use no tracking or marketing cookies. Your light or dark theme choice is saved in your browser, not on our servers.",
     ],
   },
   {
     title: "6. Your rights",
     body: [
-      "You have the right to access, correct, or delete your personal data at any time. To exercise these rights, contact us using the link in the footer.",
-      "If you are located in the European Economic Area, you have rights under GDPR including the right to data portability and the right to object to processing.",
-      "We will respond to all privacy-related requests within 30 days.",
+      "You can see, correct, download and delete what we hold about you. Most of this is available in your settings; for anything else, contact us.",
+      "If you are in the European Economic Area or the United Kingdom, you also have the rights the GDPR gives you, including the right to object to processing and to complain to your data protection authority.",
+      "We reply to privacy requests within 30 days.",
     ],
   },
   {
     title: "7. Changes to this policy",
     body: [
-      "We may update this Privacy Policy from time to time. We will notify you of material changes by email or by displaying a notice in the application. Continued use of the service after changes constitutes acceptance of the updated policy.",
-      "This policy was last updated on 9 March 2026.",
+      "If we change this policy in a way that matters, we will say so in the app or by email before it takes effect. The date at the top shows when it was last updated.",
     ],
   },
 ];
 
 export default function PrivacyPage() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
-
-      <main className="flex-1">
-        <section className="border-b border-border/50 px-4 py-16 md:py-20">
-          <div className="container mx-auto max-w-3xl">
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Legal
-            </p>
-            <h1
-              className="mt-4 text-4xl tracking-tight md:text-5xl"
-              style={{ fontFamily: "var(--font-display), Georgia, serif", fontStyle: "italic" }}
-            >
-              Privacy Policy
-            </h1>
-            <p className="mt-4 text-muted-foreground">
-              Last updated: 9 March 2026
-            </p>
-            <p className="mt-4 leading-relaxed text-muted-foreground">
-              ResuMatchAI (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) is committed to
-              protecting your privacy. This policy explains what data we collect, how we use it,
-              and your rights in relation to it.
-            </p>
-          </div>
-        </section>
-
-        <section className="px-4 py-16">
-          <div className="container mx-auto max-w-3xl space-y-12">
-            {sections.map(({ title, body }) => (
-              <div key={title}>
-                <h2 className="text-xl font-semibold">{title}</h2>
-                <div className="mt-4 space-y-3">
-                  {body.map((paragraph, i) => (
-                    <p key={i} className="leading-relaxed text-muted-foreground">
-                      {paragraph}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            ))}
-
-            <div className="rounded-xl border border-border bg-muted/30 p-6">
-              <p className="font-semibold">Contact us about privacy</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                If you have questions about this Privacy Policy or want to exercise your rights,
-                use the Contact link in the footer or email us directly.
-              </p>
-            </div>
-          </div>
-        </section>
-      </main>
-
-      <Footer />
-    </div>
+    <LegalPage
+      title="Privacy Policy"
+      updated="11 November 2026"
+      intro="This explains what ResuMatchAI collects, who else touches it, how long it is kept, and how to delete it. It is written to be read."
+      sections={sections}
+      closing={{
+        title: "Questions about your data",
+        body: (
+          <p>
+            If something here is unclear, or you want to exercise a right that
+            the settings page does not cover, write to us and a person will
+            reply.
+          </p>
+        ),
+      }}
+    />
   );
 }

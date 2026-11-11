@@ -1,8 +1,8 @@
-import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { literata, schibstedGrotesk } from "@/lib/fonts";
 import "./globals.css";
 
 const umamiScriptUrl = process.env.NEXT_PUBLIC_UMAMI_SCRIPT_URL;
@@ -17,46 +17,43 @@ const organizationJsonLd = {
   sameAs: [],
 };
 
-const geist = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const DEFAULT_TITLE = "ResuMatchAI: see how your resume fits the job";
+const DEFAULT_DESCRIPTION =
+  "Upload a resume and a job posting. ResuMatchAI marks up what matches, what is missing and what to reword, with a score and the reasons behind it. Recruiters can rank a stack of resumes against one posting.";
 
 export const metadata: Metadata = {
   title: {
-    default: "ResuMatchAI — Match Your Resume to Any Job, Instantly",
+    default: DEFAULT_TITLE,
     template: "%s | ResuMatchAI",
   },
-  description:
-    "AI-powered resume analysis and job matching. Upload your resume, paste a job description, and get an instant match score with personalised recommendations.",
+  description: DEFAULT_DESCRIPTION,
   metadataBase: new URL("https://resumatch.zeeshanai.cloud"),
+  // The social image comes from src/app/opengraph-image.tsx and
+  // twitter-image.tsx (file-based metadata), so no `images` are set here.
   openGraph: {
     type: "website",
     url: "https://resumatch.zeeshanai.cloud",
-    title: "ResuMatchAI — Match Your Resume to Any Job, Instantly",
-    description:
-      "AI-powered resume analysis and job matching. Get an instant match score and tailored recommendations to land your next role.",
+    title: DEFAULT_TITLE,
+    description: DEFAULT_DESCRIPTION,
     siteName: "ResuMatchAI",
-    images: [
-      {
-        url: "/opengraph-image.png",
-        width: 1200,
-        height: 630,
-        alt: "ResuMatchAI — AI-powered resume and job matching tool",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "ResuMatchAI — Match Your Resume to Any Job, Instantly",
-    description:
-      "AI-powered resume analysis and job matching. Get an instant match score and tailored recommendations.",
-    images: ["/opengraph-image.png"],
+    title: DEFAULT_TITLE,
+    description: DEFAULT_DESCRIPTION,
   },
   robots: {
     index: true,
     follow: true,
   },
+};
+
+// Mirrors --background (light) and --background (dark) from globals.css.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f7f2e9" },
+    { media: "(prefers-color-scheme: dark)", color: "#17130e" },
+  ],
 };
 
 export default function RootLayout({
@@ -66,7 +63,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geist.variable} font-sans antialiased`}>
+      <body
+        className={`${schibstedGrotesk.variable} ${literata.variable} font-sans antialiased`}
+      >
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
@@ -81,7 +80,7 @@ export default function RootLayout({
           {/* Mounted at the root: toasts raised on marketing-side pages
               (sign-in, verify-email, forgot-password) render nothing at all
               if the Toaster only lives in the dashboard route group. */}
-          <Toaster position="bottom-right" richColors />
+          <Toaster position="bottom-right" />
         </ThemeProvider>
         {umamiScriptUrl && umamiWebsiteId && (
           <Script

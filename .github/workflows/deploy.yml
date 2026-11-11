@@ -1,14 +1,15 @@
 name: Deploy to Coolify
 
-# Auto-deploys this app to Coolify on every push to main. Use this INSTEAD of
-# Coolify's built-in git-push webhook: that webhook is fire-once — a transient
-# 502 (Coolify briefly unreachable while a build is running) silently drops the
-# deploy with no retry. This workflow calls Coolify's deploy API with retries +
-# backoff and turns a red run (with email) when it can't reach Coolify at all.
+# Auto-deploys BOTH apps to Coolify on every push to main: the Next.js frontend and the FastAPI
+# backend (backend/, Dockerfile build). Use this INSTEAD of Coolify's built-in git-push webhook:
+# that webhook is fire-once, so a transient 502 (Coolify briefly unreachable while a build is
+# running) silently drops the deploy with no retry. This workflow calls Coolify's deploy API with
+# retries + backoff and turns a red run (with email) when it can't reach Coolify at all.
 #
 # Repo secrets required (Settings -> Secrets and variables -> Actions):
-#   COOLIFY_API_TOKEN  - a Coolify API token with deploy permission
-#   COOLIFY_APP_UUID   - the APPLICATION uuid (Coolify app URL /application/<uuid>)
+#   COOLIFY_API_TOKEN         - a Coolify API token with deploy permission
+#   COOLIFY_APP_UUID          - the frontend APPLICATION uuid (Coolify app URL /application/<uuid>)
+#   COOLIFY_BACKEND_APP_UUID  - the backend APPLICATION uuid
 
 env:
   COOLIFY_URL: https://coolify.zeeshanai.cloud
@@ -25,16 +26,20 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # a failing backend deploy must not stop the frontend one (and vice versa)
+      matrix:
+        app: [backend, frontend]
     steps:
-      - name: Trigger Coolify deploy (with retries)
+      - name: Trigger Coolify deploy for ${{ matrix.app }} (with retries)
         env:
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
-          COOLIFY_APP_UUID: ${{ secrets.COOLIFY_APP_UUID }}
+          APP_UUID: ${{ matrix.app == 'backend' && secrets.COOLIFY_BACKEND_APP_UUID || secrets.COOLIFY_APP_UUID }}
         run: |
           set -u
           for i in 1 2 3 4 5; do
-            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 \
-              "${COOLIFY_URL}/api/v1/deploy?uuid=${COOLIFY_APP_UUID}&force=false" \
+            code=$(curl -sS -X POST -o /dev/null -w "%{http_code}" --max-time 90 \
+              "${COOLIFY_URL}/api/v1/deploy?uuid=${APP_UUID}&force=false" \
               -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" || echo "000")
             echo "Attempt $i -> HTTP $code"
             if [ "$code" = "200" ]; then
@@ -47,5 +52,5 @@ jobs:
               sleep "$backoff"
             fi
           done
-          echo "::error::All 5 attempts to trigger the Coolify deploy failed."
+          echo "::error::All 5 attempts to trigger the Coolify deploy for ${{ matrix.app }} failed."
           exit 1

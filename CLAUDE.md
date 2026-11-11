@@ -85,7 +85,7 @@ AI-powered resume ↔ job-description matcher. Live: https://resumatch.zeeshanai
 ## Deployment (Coolify)
 - App UUID `m12enit7riai77x6d76m7m90`; deploy = `git push origin main` → `.github/workflows/deploy.yml` calls the Coolify deploy API (retries). Secrets: `COOLIFY_APP_UUID`, `COOLIFY_API_TOKEN`.
 - In Coolify, mark every `NEXT_PUBLIC_*` and `BETTER_AUTH_URL` **build-time**; secrets runtime.
-- Container `DATABASE_URL` uses the **docker0 gateway IP `10.0.0.1`**, not the public IP. Build uses `NIXPACKS_INSTALL_CMD=npm install` (cross-OS lockfile drift), Node 22.
+- Container `DATABASE_URL` uses the **docker0 gateway IP `10.0.0.1`**, not the public IP. The frontend builds with **Railpack** (Coolify `build_pack=railpack`): `RAILPACK_INSTALL_CMD=npm install` (cross-OS lockfile drift), `RAILPACK_NODE_VERSION=22`.
 - SSH admin: `ssh -i ~/.ssh/hostinger_vps_ed25519 root@76.13.7.106`; Coolify API on `http://localhost:8000/api/v1`.
 
 ## backend/ (FastAPI, added in the rebuild — see `docs/plan/`)

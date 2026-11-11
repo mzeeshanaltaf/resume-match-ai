@@ -95,12 +95,12 @@ async def test_model_tier_effort_and_timeout_come_from_settings(
     assert call["text_format"] is JdExtraction
 
 
-async def test_defaults_are_luna_on_flex_with_low_effort(settings: Settings) -> None:
+async def test_defaults_are_luna_on_the_default_tier_with_low_effort(settings: Settings) -> None:
     service, client = _service(settings, [PARSED, NS(output_text=" hi ")])
     await _parse(service)
     assert await service.text("ocr", input="x") == "hi"
     first, second = client.responses.calls
-    assert (first["model"], first["service_tier"]) == ("gpt-6-luna", "flex")
+    assert (first["model"], first["service_tier"]) == ("gpt-6-luna", "default")
     assert first["reasoning"] == {"effort": "low"} and second["reasoning"] == {"effort": "low"}
 
 
@@ -118,23 +118,34 @@ async def test_global_effort_applies_when_no_task_override(make_settings: Callab
         _status_error(openai.InternalServerError, 503),
     ],
 )
-async def test_flex_failure_retries_once_on_the_fallback_tier(failure: Exception, settings: Settings) -> None:
-    service, client = _service(settings, [failure, PARSED])
+async def test_flex_failure_retries_once_on_the_fallback_tier(
+    failure: Exception, make_settings: Callable[..., Settings]
+) -> None:
+    # Flex is opt-in now (LLM_SERVICE_TIER=flex); the fallback only matters when it is chosen.
+    service, client = _service(make_settings(llm_service_tier="flex"), [failure, PARSED])
     result = await _parse(service)
     assert result.job_title == "t"
     tiers = [c["service_tier"] for c in client.responses.calls]
     assert tiers == ["flex", "default"]
 
 
+async def test_failure_on_the_default_tier_is_not_retried_on_the_same_tier(settings: Settings) -> None:
+    service, client = _service(settings, [_status_error(openai.RateLimitError, 429), PARSED])
+    with pytest.raises(LLMError) as exc:
+        await _parse(service)
+    assert exc.value.code == "LLM_UNAVAILABLE"
+    assert [c["service_tier"] for c in client.responses.calls] == ["default"]
+
+
 async def test_fallback_tier_is_configurable(make_settings: Callable[..., Settings]) -> None:
-    settings = make_settings(llm_fallback_service_tier="auto")
+    settings = make_settings(llm_service_tier="flex", llm_fallback_service_tier="auto")
     service, client = _service(settings, [_status_error(openai.RateLimitError, 429), PARSED])
     await _parse(service)
     assert [c["service_tier"] for c in client.responses.calls] == ["flex", "auto"]
 
 
 async def test_empty_fallback_disables_the_retry(make_settings: Callable[..., Settings]) -> None:
-    settings = make_settings(llm_fallback_service_tier="")
+    settings = make_settings(llm_service_tier="flex", llm_fallback_service_tier="")
     service, client = _service(settings, [_status_error(openai.RateLimitError, 429), PARSED])
     with pytest.raises(LLMError) as exc:
         await _parse(service)
@@ -142,7 +153,8 @@ async def test_empty_fallback_disables_the_retry(make_settings: Callable[..., Se
     assert len(client.responses.calls) == 1
 
 
-async def test_only_one_retry(settings: Settings) -> None:
+async def test_only_one_retry(make_settings: Callable[..., Settings]) -> None:
+    settings = make_settings(llm_service_tier="flex")
     timeout = openai.APITimeoutError(request=httpx.Request("POST", "https://x"))
     service, client = _service(settings, [timeout, timeout, PARSED])
     with pytest.raises(LLMError) as exc:

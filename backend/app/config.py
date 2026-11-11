@@ -54,9 +54,11 @@ class Settings(BaseSettings):
     # ── OpenAI (Responses API + Decisions API) ──────────────────────────────
     openai_api_key: str = ""
     llm_model: str = "gpt-6-luna"
-    llm_service_tier: str = "flex"
-    # One retry on this tier when the primary tier times out or has no capacity.
-    # Set to an empty string to disable the fallback.
+    # `default` = standard processing. `flex` is cheaper but queues and refused about half of
+    # the calls in Phase 7 testing; set LLM_SERVICE_TIER=flex to opt back in.
+    llm_service_tier: str = "default"
+    # One retry on this tier when the primary tier times out or has no capacity (skipped when
+    # it equals the primary tier). Set to an empty string to disable the fallback.
     llm_fallback_service_tier: str = "default"
     llm_reasoning_effort: ReasoningEffort = "low"
     llm_match_reasoning_effort: ReasoningEffort | None = None
@@ -64,7 +66,7 @@ class Settings(BaseSettings):
     llm_ocr_reasoning_effort: ReasoningEffort | None = None
     llm_bullets_reasoning_effort: ReasoningEffort | None = None
     llm_cover_letter_reasoning_effort: ReasoningEffort | None = None
-    llm_timeout_seconds: float = Field(default=600, gt=0)  # flex requests can queue
+    llm_timeout_seconds: float = Field(default=600, gt=0)  # sized for flex, which can queue
 
     # Decisions API validation gate.
     decision_model: str = "gpt-6-luna"

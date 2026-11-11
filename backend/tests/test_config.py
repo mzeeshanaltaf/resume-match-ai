@@ -21,7 +21,7 @@ def _fresh(monkeypatch: pytest.MonkeyPatch, **env: str) -> Settings:
 def test_defaults_match_master_plan(monkeypatch: pytest.MonkeyPatch) -> None:
     s = _fresh(monkeypatch)
     assert s.llm_model == "gpt-6-luna"
-    assert s.llm_service_tier == "flex"
+    assert s.llm_service_tier == "default"  # was flex until Phase 8 (flex 429'd about every other call)
     assert s.llm_fallback_service_tier == "default"
     assert s.llm_reasoning_effort == "low"
     assert s.llm_timeout_seconds == 600

@@ -5,11 +5,12 @@ structured outputs (:meth:`parse`), plain text (:meth:`text`, used for vision OC
 the Decisions API (:meth:`decide`). Model, service tier, reasoning effort and timeout all
 come from settings; no call site names any of them.
 
-Service-tier fallback: requests use ``LLM_SERVICE_TIER`` (``flex``). Flex can queue and can
-be refused for capacity, so a timeout, connection error, 429 or 5xx on the primary tier is
-retried **once** on ``LLM_FALLBACK_SERVICE_TIER`` (empty disables the retry). The SDK's own
-retries are switched off (``max_retries=0``) so a flex timeout costs one timeout, not
-three. The Decisions API takes no service tier (see the master plan) and uses a short
+Service-tier fallback: requests use ``LLM_SERVICE_TIER`` (``default`` since Phase 8). On a
+tier that can queue or be refused for capacity (``flex``), a timeout, connection error, 429
+or 5xx on the primary tier is retried **once** on ``LLM_FALLBACK_SERVICE_TIER`` (empty
+disables the retry; the retry is skipped when it names the same tier as the primary). The
+SDK's own retries are switched off (``max_retries=0``) so a flex timeout costs one timeout,
+not three. The Decisions API takes no service tier (see the master plan) and uses a short
 timeout with the SDK's normal retries.
 """
 

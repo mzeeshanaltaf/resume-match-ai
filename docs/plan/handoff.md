@@ -568,7 +568,7 @@ Phase 7's exit criteria were re-verified first: git clean, `npx tsc --noEmit` cl
 - Container logs for both apps: no errors (the only warning is the post-deletion sign-in attempt). Backend logs show `LLM call ok: model=gpt-6-luna tier=default` (5 to 24 s per call).
 
 ### Open issues / decisions deferred
-- **The n8n API key was not rotated** (the user chose to continue without it). Its value is still in the old workflow JSONs' `pinData` (and so in old repo history). The contact form uses it as `x-api-key`; rotate it in n8n and update `N8N_API_KEY` in Coolify.
+- **The n8n API key was rotated after the cutover** (2026-11-11): the user created the new value, it was copied from `.env.local` into Coolify's `N8N_API_KEY` (live and preview rows) and the frontend was redeployed; the running container's value was checked equal to `.env.local`. The old value still sits in the old workflow JSONs' `pinData` and old repo history, but no longer authenticates. Not tested: a real contact-form submission (it would trigger the n8n contact workflow's notification).
 - **Not run**: Google sign-in and Google-only deletion, a real OTP email, Safari/Firefox, `scripts/e2e/hydration-check.mjs` against the live site, a visual pass in a real browser on the deployed UI (the Phase 7 production-build run covered it locally).
 - `LLM_TIMEOUT_SECONDS=600` was sized for flex; on the default tier a shorter timeout (about 120 s) would fail faster. Left unchanged (only the tier was requested).
 - Stale `NIXPACKS_*` env vars remain on the frontend app next to the `RAILPACK_*` ones (harmless; remove when convenient).

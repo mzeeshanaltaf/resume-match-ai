@@ -107,6 +107,18 @@ async def test_pasted_text_limit(make_pipeline: Callable[..., Pipeline]) -> None
         {"url": "ftp://example.com/job"},
         {"url": "not a url"},
         {"url": "https://" + "a" * 3000},
+        # Not a public job page: never worth a scrape, and closed in case scraping moves in-house.
+        {"url": "http://localhost:8000/v1/credits"},
+        {"url": "http://127.0.0.1/admin"},
+        {"url": "http://[::1]/x"},
+        {"url": "http://10.0.0.1/x"},
+        {"url": "http://169.254.169.254/latest/meta-data/"},
+        {"url": "http://192.168.1.10/x"},
+        {"url": "http://2130706433/x"},  # 127.0.0.1 as a single integer is not a dotted name either
+        {"url": "http://minio:9000/resumatch"},
+        {"url": "http://printer.local/job"},
+        {"url": "http://db.internal/x"},
+        {"url": "https://example.com:notaport/x"},
         {"text": JD_TEXT, "mode": "boss"},
         {"text": JD_TEXT, "extra": 1},
     ],
@@ -116,6 +128,22 @@ async def test_invalid_requests_are_422(pipeline: Pipeline, body: dict) -> None:
     response = await pipeline.client.post("/v1/job-descriptions", json=body, headers=pipeline.headers())
     assert response.status_code == 422 and response.json()["code"] == "VALIDATION_ERROR"
     assert pipeline.llm.decide_calls == [] and pipeline.firecrawl.urls == []
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://job-boards.greenhouse.io/gitlab/jobs/8771512002",
+        "http://jobs.example.com:8080/x?y=1",
+        "https://93.184.216.34/job",  # a public IP literal
+        "https://[2606:2800:220:1:248:1893:25c8:1946]/job",
+    ],
+)
+async def test_public_urls_are_accepted(pipeline: Pipeline, url: str) -> None:
+    response = await pipeline.client.post(
+        "/v1/job-descriptions", json={"url": url, "mode": "candidate"}, headers=pipeline.headers()
+    )
+    assert response.status_code == 202
 
 
 async def test_mode_is_required(pipeline: Pipeline) -> None:

@@ -14,8 +14,10 @@ from functools import lru_cache
 from typing import Annotated, Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+_DEV_SALT = "dev-only-change-me"
 
 # Tasks that can override LLM_REASONING_EFFORT (LLM_<TASK>_REASONING_EFFORT).
 ReasoningTask = Literal["match", "jd", "ocr", "bullets", "cover_letter"]
@@ -110,7 +112,7 @@ class Settings(BaseSettings):
     cover_letter_credit_cost: int = Field(default=1, gt=0)
     screening_credit_cost_per_resume: int = Field(default=1, gt=0)
     # Salt for the hash of deleted-account emails. Changing it forgets prior deletions.
-    email_hash_salt: str = "dev-only-change-me"
+    email_hash_salt: str = _DEV_SALT
 
     # ── Account export ──────────────────────────────────────────────────────
     export_cooldown_seconds: int = Field(default=3600, ge=0)
@@ -175,6 +177,25 @@ class Settings(BaseSettings):
     @classmethod
     def _normalise_origins(cls, value: list[str]) -> list[str]:
         return [origin.rstrip("/") for origin in value]
+
+    @model_validator(mode="after")
+    def _production_must_be_configured(self) -> Settings:
+        """Fail at startup, not at the first deletion, when a production deploy still runs on
+        development defaults. (``ENVIRONMENT=prod`` itself is what hides ``/docs``.)"""
+        if self.environment != "prod":
+            return self
+        problems: list[str] = []
+        if self.email_hash_salt == _DEV_SALT or len(self.email_hash_salt) < 16:
+            problems.append("EMAIL_HASH_SALT must be a secret of at least 16 characters")
+        if len(self.internal_api_key) < 16:
+            problems.append("INTERNAL_API_KEY must be set (at least 16 characters)")
+        if self.storage_backend != "s3":
+            problems.append("STORAGE_BACKEND must be 's3' (local files are lost when the container is replaced)")
+        if not self.openai_api_key:
+            problems.append("OPENAI_API_KEY must be set")
+        if problems:
+            raise ValueError("Unsafe production configuration: " + "; ".join(problems))
+        return self
 
     # ── Derived values ──────────────────────────────────────────────────────
     @property

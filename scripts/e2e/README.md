@@ -27,5 +27,25 @@ Run (servers up: `npm run dev` and `cd backend && DEV_REAL_AUTH=1 uv run python 
 
 Phase 6 scripts take `APP_URL` and `API_URL` (defaults `http://127.0.0.1:3005` / `:8012`), so they can run on spare ports when 3000 or 8000 are taken: start Next with `BETTER_AUTH_URL`, `NEXT_PUBLIC_API_URL` and `API_INTERNAL_URL` overridden, and the backend (`PORT=...`) with `AUTH_JWKS_URL`, `AUTH_ISSUER` and `CORS_ORIGINS` pointing at the Next origin.
 
+## Phase 7: against the REAL OpenAI / Firecrawl
+
+These use the real backend (`uvicorn app.main:app`), not the fake-AI dev server. The backend gets
+`OPENAI_API_KEY` / `FIRECRAWL_API_KEY` **from its process environment** (never copy the repo-root `.env.local`
+into `backend/.env`). Each real run spends a few credits of the throwaway user and a few cents of API money.
+
+| Script | Covers |
+|---|---|
+| `backend/dev/live_corpus.py <dir>` | Writes the realistic sample files (resumes as PDF / scanned PDF / DOCX / TXT, cover letter, article, company page, blank, 6 pages, >5 MB, job texts). |
+| `backend/dev/live_gate_probe.py <dir> [url ...]` | Prints the validation gate's raw probability, detected type and latency per document (and per scraped URL). Use it before changing `DECISION_MIN_PROBABILITY`. |
+| `e2e-phase7.mjs` | Over HTTP with real sign-in: every upload type and refusal, JD by text and URL (and the rejected ones), Job Fit, bullets, cover letter, 3-resume screening, ledger, delete-match semantics, storage, 402 at zero credits, export. Env: `CORPUS`, `OUT`, `JD_URL`, `API_URL`. |
+| `e2e-phase7-export.mjs` | Stage 2: populates bullets + letter, exports, and runs `verify_export.py` (every ZIP member against what the API shows, resumes byte for byte). Also writes `OUT/seed.json` for `SEED_JSON=... shots-phase6.mjs`. |
+| `e2e-delete.mjs` | With `REAL=1 API_URL=... SAMPLE=<a real resume>` it restarts the real backend (needs the keys in the environment). |
+| `hydration-check.mjs` | Production-build hydration check. `THROTTLE=6` slows the CPU 6x: a timing-dependent mismatch (React #418) shows up deterministically. Run it against `next build` + `next start`, not `next dev`. |
+
+Running a production build locally: build and start with the dev values **exported in the shell** (`.env.local` holds the
+production database, and `next build` / `next start` do not read `.env.development.local`):
+`DATABASE_URL`, `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `INTERNAL_API_KEY`, `RESEND_API_KEY` (dummy), the API URLs. Plain-HTTP sign-in
+works on 127.0.0.1 in production mode. `NEXT_DIST_DIR=.next-x` keeps it apart from a running dev server.
+
 All of the scripts assume the local dev stack and the `resumatch_dev` database in the `resumatch-dev-postgres`
 container; they run SQL there to mark test users verified. Never point them at production.

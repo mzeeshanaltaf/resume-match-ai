@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { HelpCircle, LogOut, Settings } from "lucide-react";
-import { useSession, signOut } from "@/lib/auth-client";
+import { signOut } from "@/lib/auth-client";
+import { useClientSession } from "@/lib/use-client-session";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -23,7 +24,7 @@ function initials(nameOrEmail: string) {
 
 export function UserMenu() {
   const router = useRouter();
-  const { data: session, isPending } = useSession();
+  const { data: session, isPending } = useClientSession();
 
   async function handleSignOut() {
     await signOut();

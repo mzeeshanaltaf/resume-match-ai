@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSession } from "@/lib/auth-client";
+import { useClientSession } from "@/lib/use-client-session";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import type { ComponentProps } from "react";
@@ -25,7 +25,7 @@ export function CtaButton({
   variant,
   withArrow = false,
 }: CtaButtonProps) {
-  const { data: session, isPending } = useSession();
+  const { data: session, isPending } = useClientSession();
   const signedIn = !!session?.user;
 
   const href = signedIn ? "/dashboard" : "/sign-up";

@@ -6,7 +6,8 @@ import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { authClient, clearApiToken, signOut, useSession } from "@/lib/auth-client";
+import { authClient, clearApiToken, signOut } from "@/lib/auth-client";
+import { useClientSession } from "@/lib/use-client-session";
 import { api } from "@/lib/api/client";
 import { describeError } from "@/lib/api/errors";
 import { ErrorNote } from "@/components/dashboard/notes";
@@ -85,7 +86,7 @@ function ExportData() {
 
 function DeleteAccount() {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session } = useClientSession();
   const hasPassword = useHasPassword();
   const emailId = useId();
   const passwordId = useId();

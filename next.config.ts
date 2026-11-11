@@ -14,6 +14,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Lets a second dev server run next to another one (each needs its own build dir).
+  // Unset in production, so the default `.next` is used.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+
   // Hides the Next.js dev-tools indicator (the N logo in the bottom-left corner)
   devIndicators: false,
 

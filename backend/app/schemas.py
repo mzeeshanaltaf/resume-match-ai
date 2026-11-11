@@ -7,10 +7,12 @@ happens in the ``*_out`` converters in ``app.services.documents``.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import uuid
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -20,6 +22,34 @@ Mode = Literal["candidate", "recruiter"]
 # is collapsed).
 MIN_JD_TEXT_CHARS = 10
 MAX_JD_URL_CHARS = 2048
+
+_NON_PUBLIC_SUFFIXES = (".local", ".localhost", ".internal", ".lan", ".home", ".corp", ".intranet")
+
+
+def _is_public_host(url: str) -> bool:
+    """False for hosts that cannot be a public job page: IP literals that are private,
+    loopback, link-local or otherwise reserved, ``localhost`` and single-label or
+    internal-looking names.
+
+    The backend never fetches the URL itself (Firecrawl does, from its own network), so this
+    is defence in depth: it keeps the SSRF surface closed if scraping ever moves in-house and
+    stops wasted scrape credits. DNS names that *resolve* to private addresses are not
+    caught here, by design (no DNS lookups in validation).
+    """
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").rstrip(".").lower()
+        parts.port  # noqa: B018 - raises ValueError for a malformed port
+    except ValueError:
+        return False
+    if not host:
+        return False
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        # A name: needs a dot (so not `localhost`, `redis`, ...) and no internal-only suffix.
+        return "." in host and not host.endswith(_NON_PUBLIC_SUFFIXES)
+    return address.is_global
 
 
 # ── Documents ───────────────────────────────────────────────────────────────
@@ -69,6 +99,8 @@ class JobDescriptionCreate(BaseModel):
             raise ValueError(f"url must be at most {MAX_JD_URL_CHARS} characters")
         if not re.match(r"^https?://[^\s/]+", value, re.IGNORECASE):
             raise ValueError("url must start with http:// or https:// and include a host")
+        if not _is_public_host(value):
+            raise ValueError("url must point to a public website")
         return value
 
     @model_validator(mode="after")

@@ -5,8 +5,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const APP = "http://127.0.0.1:3000";
-const API = "http://127.0.0.1:8000";
+// APP_URL / API_URL default to the Phase 4 ports. Set REAL=1 to restart the real backend
+// (real AI; needs OPENAI_API_KEY / FIRECRAWL_API_KEY in this process's environment) instead of
+// the fake-AI dev server, and SAMPLE to a resume the real validation gate will accept.
+const APP = process.env.APP_URL ?? "http://127.0.0.1:3000";
+const API = process.env.API_URL ?? "http://127.0.0.1:8000";
+const API_PORT = new URL(API).port;
+const SAMPLE = process.env.SAMPLE ?? path.join(here, "samples", "resume_1.pdf");
 const BACKEND_DIR = path.resolve(here, "../../backend");
 const EMAIL = `del+${Date.now()}@example.test`;
 const PASSWORD = "Del-Password-123!";
@@ -20,7 +25,7 @@ const psql = (sql) =>
   execFileSync("docker", ["exec", "resumatch-dev-postgres", "psql", "-U", "resumatch", "-d", "resumatch_dev", "-At", "-c", sql], { encoding: "utf8" }).trim();
 
 function backendPid() {
-  const out = execFileSync("powershell", ["-NoProfile", "-Command", "(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess"], { encoding: "utf8" }).trim();
+  const out = execFileSync("powershell", ["-NoProfile", "-Command", `(Get-NetTCPConnection -LocalPort ${API_PORT} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess`], { encoding: "utf8" }).trim();
   return out ? Number(out) : null;
 }
 async function waitHealth(up) {
@@ -37,7 +42,10 @@ function stopBackend() {
 }
 function startBackend() {
   const log = fs.openSync(path.join(here, "backend-restart.log"), "a");
-  const child = spawn("uv", ["run", "python", "dev/dev_server.py"], {
+  const args = process.env.REAL
+    ? ["run", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", API_PORT]
+    : ["run", "python", "dev/dev_server.py"];
+  const child = spawn("uv", args, {
     cwd: BACKEND_DIR,
     env: { ...process.env, DEV_REAL_AUTH: "1", DEV_FAKE_DELAY: "0.2" },
     detached: true,
@@ -93,7 +101,7 @@ check("backend rejects a tampered token", (await api(token.slice(0, -4) + "AAAA"
 // give the user app data
 const fd = new FormData();
 fd.append("mode", "candidate");
-fd.append("file", new Blob([fs.readFileSync(path.join(here, "samples", "resume_1.pdf"))], { type: "application/pdf" }), "del_resume.pdf");
+fd.append("file", new Blob([fs.readFileSync(SAMPLE)], { type: "application/pdf" }), "del_resume.pdf");
 const up = await api(token, "/v1/resumes", { method: "POST", body: fd });
 const { job_id } = await up.json();
 for (let i = 0; i < 40; i++) {

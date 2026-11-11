@@ -18,8 +18,11 @@ const shots = path.join(here, "shots", "matrix");
 fs.mkdirSync(shots, { recursive: true });
 const APP = process.env.APP_URL ?? "http://127.0.0.1:3005";
 const API = process.env.API_URL ?? "http://127.0.0.1:8012";
-const EMAIL = `sweep+${Date.now()}@example.test`;
-const PASSWORD = "E2e-Password-123!";
+// SEED_JSON=<file {email, password, ids: {match, recruiterMatch}}> skips seeding and sweeps an
+// account that already has data (Phase 7 uses it on the account built with real OpenAI output).
+const SEED = process.env.SEED_JSON ? JSON.parse(fs.readFileSync(process.env.SEED_JSON, "utf8")) : null;
+const EMAIL = SEED?.email ?? `sweep+${Date.now()}@example.test`;
+const PASSWORD = SEED?.password ?? "E2e-Password-123!";
 const axeSource = fs.readFileSync(path.join(here, "..", "..", "node_modules", "axe-core", "axe.min.js"), "utf8");
 
 const SIZES = { mobile: [390, 844], tablet: [820, 1180], desktop: [1440, 900] };
@@ -32,6 +35,8 @@ function psql(sql) {
 }
 
 // ── Seed through the API ──
+const ids = SEED ? { ...SEED.ids } : {};
+if (!SEED) {
 await fetch(`${APP}/api/auth/sign-up/email`, {
   method: "POST",
   headers: { "Content-Type": "application/json", Origin: APP },
@@ -73,7 +78,6 @@ async function posting(text, mode) {
   return (await job(r.job_id)).jd_id;
 }
 const jdText = fs.readFileSync(path.join(samples, "jd.txt"), "utf8");
-const ids = {};
 const r1 = await upload("resume_1.pdf", "candidate");
 const jd1 = await posting(jdText, "candidate");
 ids.match = (await job((await api("/v1/matches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume_id: r1, jd_id: jd1 }) })).job_id)).match_id;
@@ -85,6 +89,7 @@ const jd2 = await posting(jdText + "\nRecruiter copy.", "recruiter");
 const screening = await job((await api("/v1/screenings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume_ids: rr, jd_id: jd2 }) })).job_id);
 ids.recruiterMatch = screening.ranked[0].match_id;
 console.log("seeded:", EMAIL, JSON.stringify(ids));
+}
 
 const PAGES = [
   ["overview", "/dashboard"],

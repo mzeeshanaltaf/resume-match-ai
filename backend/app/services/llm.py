@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Any, TypeVar
 
@@ -87,20 +88,37 @@ class LLMService:
         """Run ``call(service_tier)``; retry once on the fallback tier if the primary fails."""
         primary = self._settings.llm_service_tier or None
         fallback = self._settings.fallback_service_tier
+        started = time.perf_counter()
         try:
-            return await call(primary if primary else omit)
+            result = await call(primary if primary else omit)
+            logger.info(
+                "LLM call ok: model=%s tier=%s %.1fs",
+                self._settings.llm_model,
+                primary or "default",
+                time.perf_counter() - started,
+            )
+            return result
         except _RETRYABLE as exc:
             if fallback and fallback != primary:
                 logger.warning(
-                    "LLM call failed on tier %r (%s); retrying once on %r",
+                    "LLM call failed on tier %r after %.1fs (%s); retrying once on %r",
                     primary,
+                    time.perf_counter() - started,
                     exc.__class__.__name__,
                     fallback,
                 )
+                retry_started = time.perf_counter()
                 try:
-                    return await call(fallback)
+                    result = await call(fallback)
                 except openai.OpenAIError as retry_exc:
                     raise self._to_error(retry_exc) from retry_exc
+                logger.info(
+                    "LLM call ok on fallback: model=%s tier=%s %.1fs",
+                    self._settings.llm_model,
+                    fallback,
+                    time.perf_counter() - retry_started,
+                )
+                return result
             raise self._to_error(exc) from exc
         except openai.OpenAIError as exc:
             raise self._to_error(exc) from exc

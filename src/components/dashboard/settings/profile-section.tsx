@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, LogOut } from "lucide-react";
 import { toast } from "sonner";
-import { authClient, useSession, signOut } from "@/lib/auth-client";
+import { authClient, signOut } from "@/lib/auth-client";
+import { useClientSession } from "@/lib/use-client-session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,7 +35,7 @@ function Field({
 
 export function ProfileSection() {
   const router = useRouter();
-  const { data: session, isPending } = useSession();
+  const { data: session, isPending } = useClientSession();
   const hasPassword = useHasPassword();
 
   const [name, setName] = useState("");

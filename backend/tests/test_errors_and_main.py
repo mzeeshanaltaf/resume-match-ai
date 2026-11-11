@@ -113,7 +113,15 @@ async def test_cors_exposes_the_headers_the_browser_client_reads(client: httpx.A
 
 
 async def test_docs_hidden_in_production(make_settings: Callable[..., Any]) -> None:
-    prod = create_app(make_settings(environment="prod"))
+    prod = create_app(
+        make_settings(
+            environment="prod",
+            email_hash_salt="a-long-random-production-salt",
+            internal_api_key="a-long-random-internal-key",
+            storage_backend="s3",
+            openai_api_key="sk-test",
+        )
+    )
     transport = httpx.ASGITransport(app=prod, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
         assert (await http.get("/docs")).status_code == 404

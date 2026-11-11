@@ -39,6 +39,43 @@ def test_defaults_match_master_plan(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.auth_algorithms == ["EdDSA"]
 
 
+_PROD_OK = {
+    "ENVIRONMENT": "prod",
+    "EMAIL_HASH_SALT": "a-long-random-production-salt",
+    "INTERNAL_API_KEY": "a-long-random-internal-key",
+    "STORAGE_BACKEND": "s3",
+    "OPENAI_API_KEY": "sk-test",
+}
+
+
+def test_production_accepts_a_complete_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert _fresh(monkeypatch, **_PROD_OK).environment == "prod"
+
+
+@pytest.mark.parametrize(
+    ("override", "mentions"),
+    [
+        ({"EMAIL_HASH_SALT": "dev-only-change-me"}, "EMAIL_HASH_SALT"),  # the public default
+        ({"EMAIL_HASH_SALT": "short"}, "EMAIL_HASH_SALT"),
+        ({"INTERNAL_API_KEY": ""}, "INTERNAL_API_KEY"),
+        ({"INTERNAL_API_KEY": "dev-internal"}, "INTERNAL_API_KEY"),
+        ({"STORAGE_BACKEND": "local"}, "STORAGE_BACKEND"),
+        ({"OPENAI_API_KEY": ""}, "OPENAI_API_KEY"),
+    ],
+)
+def test_production_refuses_to_start_on_development_defaults(
+    monkeypatch: pytest.MonkeyPatch, override: dict[str, str], mentions: str
+) -> None:
+    with pytest.raises(ValueError, match=mentions):
+        _fresh(monkeypatch, **{**_PROD_OK, **override})
+
+
+def test_development_and_test_keep_their_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for env in ("dev", "test"):
+        s = _fresh(monkeypatch, ENVIRONMENT=env)
+        assert s.email_hash_salt == "dev-only-change-me" and s.storage_backend == "local"
+
+
 def test_default_database_is_local_dev_never_production(monkeypatch: pytest.MonkeyPatch) -> None:
     s = _fresh(monkeypatch)
     assert "127.0.0.1" in s.database_url
